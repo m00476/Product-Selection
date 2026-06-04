@@ -13,7 +13,7 @@
 
 **对比平台**：AliExpress + Ozon（后续可扩展更多平台）。
 **数据获取方式**：已有的「Selenium 探测 + 内部接口回放」脚本（Seerfar / IXSPY / ERP），详见 §2.1。非官方开放 API。
-**部署**：海外服务器（理由：竞品数据是高频大量拉取，必须稳；Ozon 服务器在俄罗斯，国内直连易超时；ERP 是自家数据可低频同步）。
+**部署**：**位置待定**，优先实测国内 / 海外 / 采集与分析拆分三种方案后再定（取数脚本需登录国内 ERP + 国际 Seerfar/IXSPY，存在网络与风控权衡，详见 §7）。
 **使用者**：多名运营，通过 Web 看板访问。
 **团队约束**：技术较弱，借助 Claude + Codex 辅助开发，要求技术栈简单、AI 易维护。
 
@@ -88,8 +88,26 @@
 
 ## 4. 数据模型
 
-### 原始层（保留 API 原貌，可溯源、可重解析）
-- `raw_aliexpress`、`raw_ozon`、`raw_erp`：id、抓取时间、原始 json、来源 url。
+### 原始层（保留响应原貌，可溯源、可重解析）
+统一一张通用表 `raw_source_records`（不按平台分表，与现有源 `seerfar/ixspy/erp` 对齐）：
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | bigserial PK | 主键 |
+| `source` | text | `seerfar` / `ixspy` / `erp` / 未来新源 |
+| `product_type` | text | 抓取品类（PRODUCT_TYPE 分批） |
+| `source_file` | text | 来源 CSV/JSON 文件路径（可溯源到具体 fetch 产物） |
+| `source_record_id` | text | 源内记录标识；供 `source_product_links.source_record_id` 引用 |
+| `raw_payload` | jsonb | **仅业务响应数据**，详见下方脱敏边界 |
+| `payload_hash` | text | `raw_payload` 哈希，用于去重/识别变化 |
+| `collected_at` | timestamptz | 抓取时间 |
+
+唯一键 `(source, source_record_id)`；`payload_hash` 用于幂等 upsert。
+
+**raw 数据脱敏与权限边界（强制）：**
+- `raw_payload` **只存业务响应**（商品字段），**严禁存 cookie / 请求头 / token / 登录凭证**。probe 捕获的请求头/cookie 仅用于 fetch 运行期，不入数据库。
+- 如需保存调试用的完整请求（含 headers），只能落在采集机本地、加密或脱敏后保存，不进 PostgreSQL。
+- **Metabase 连接使用的 DB 账号无 `raw_source_records` 读权限**（看板只读标准层/分析层视图），避免原始数据经看板外泄。
 
 ### 标准层（统一结构，系统的"事实"）
 | 表 | 内容 | 关键字段 |
@@ -159,8 +177,9 @@
 
 **约束**：
 - 唯一键 `(source, source_record_id)`：同源同记录只一行，重复抓取 upsert。
-- 唯一键 `(platform, platform_product_id)` 在 `products` 上：确定关联以它为合并锚点（`platform_product_id` 非空时）。
-- `platform_product_id` 为空的记录不参与确定关联，只走 §5 模糊匹配。
+- `products` 上用**部分唯一索引** `UNIQUE (platform, platform_product_id) WHERE is_own = false AND platform_product_id IS NOT NULL`：只对有平台 ID 的**竞品 listing** 生效，作为确定关联的合并锚点。
+- **自家商品（is_own=true）不受该唯一键约束**：自家 SKU 可能无平台商品 ID、或一个 SKU 对应多平台多 listing，统一以 `erp_skus.sku`（`own_product_id`）为主键关联，竞品到自家的关联走 §5 `product_matches`。
+- `platform_product_id` 为空的竞品记录不参与确定关联，只走 §5 模糊匹配。
 
 ### 4.1.2 字段合并优先级（同一 listing 多源冲突时取谁）
 
@@ -174,7 +193,7 @@
 | 商品详情（title、image、category、brand、seller） | AliExpress→**IXSPY** 优先（更贴近真实 listing，Seerfar 标题常被本地化/翻译）；Ozon→**Seerfar**（无 IXSPY 源） | 缺失时回退另一源 |
 | 价格（price） | **最新 `collected_at` 的记录**；同时间则 Seerfar | 价格随时间变，按时序入 `price_snapshots` |
 
-规则：写入标准层时，每个被采用的值记录其来源源名；各源原始记录始终完整保留在 `raw_*`，便于回溯与改判。
+规则：写入标准层时，每个被采用的值记录其来源源名；各源原始记录始终完整保留在 `raw_source_records`，便于回溯与改判。
 
 ### 4.1.3 URL 规范化规则（抽取 platform + platform_product_id）
 
@@ -190,6 +209,8 @@
 6. 边界：解析失败、平台 `unknown`、ID 非纯数字等情况记日志（`collector_errors`），不静默丢弃。
 
 **附带改进**：现有 `seerfar_api_fetch.py` 的 flatten 丢弃了原始响应中的 `profit、grossMargin、categoryRank、naturalRank、adRank、orderConversionRate、returnCancellationRate、views、missedRevenue` 等有价值字段，扩展解析时一并纳入（对机会打分有用）。
+
+**重要：Seerfar 的 `profit / grossMargin / missedRevenue` 是第三方估算指标，不是真实利润**，入库时必须带 `metric_source = seerfar_estimated` 标记，**不得与 ERP 的真实成本/毛利（§6 确定成本）混用或相加**；看板展示时标注"第三方估算"。ERP 真实毛利仅适用于自家 SKU。
 
 ## 5. 商品匹配引擎（核心难点）
 
@@ -253,11 +274,11 @@
 - **token/会话刷新**：内部接口回放依赖登录 cookie/token，过期时自动重跑对应 probe 刷新（ERP 已实现，Seerfar/IXSPY 比照）。
 - **限速** + 失败指数退避重试，避免触发风控/被封号。
 - **失败隔离**：单源/单品类/单商品失败不中断整批。
-- **原始数据先落库**：先保存 fetch 的原始 JSON/CSV 再解析入标准层，解析逻辑可重跑而不重新抓取。
+- **原始数据先落库**：先把 fetch 的**业务响应**存入 `raw_source_records`（不含 cookie/header/token，见 §4 脱敏边界）再解析入标准层，解析逻辑可重跑而不重新抓取。
 - **定时调度**：APScheduler 或 cron，按源 + 品类（PRODUCT_TYPE）错峰循环。
 
-### Selenium/Chromedriver 与部署位置的权衡（需复核）
-采集依赖**有头/无头 Chrome + Chromedriver 登录** ERP、Seerfar、IXSPY，这给"海外服务器"决策带来新约束：
+### Selenium/Chromedriver 与部署位置的权衡（位置待定）
+采集依赖**有头/无头 Chrome + Chromedriver 登录** ERP、Seerfar、IXSPY，部署位置需在以下约束间实测权衡：
 - **ERP 在国内**（如 `http://103.198.125.2:8077`），海外服务器登录它会慢、甚至需专线/代理。
 - **Seerfar / IXSPY 登录**从陌生（海外）IP 可能触发验证码/风控，而这些工具的数据多面向国际，国内访问也未必稳。
 - 因此部署位置要在"离 ERP 近（国内）"与"离竞品源/看板访问近（海外）"之间复核。**可选拆分**：采集脚本跑在离数据源合适的机器（甚至沿用现有国内环境）只产出 CSV，PostgreSQL + 分析 + Metabase 跑在服务器，两者通过 CSV/数据库同步解耦。最终位置在实现前结合实测确定。
@@ -271,10 +292,10 @@
 | 数据库 | PostgreSQL | 稳、JSON 支持好、Metabase 原生支持 |
 | 图片匹配 | 一期感知哈希，必要时升级 CLIP 向量 | 由简到繁 |
 | 看板 | Metabase（Docker） | 现成、免写前端 |
-| 部署 | 海外服务器 + Docker Compose | 一键编排 Python 服务 + PostgreSQL + Metabase |
+| 部署 | Docker Compose（位置待定，见下） | 一键编排 Python 服务 + PostgreSQL + Metabase |
 
 ### ERP 连接
-ERP 在国内、服务器在海外 → 采集器设计为**低频定时同步**（如每天 1 次成本/库存），做好超时重试。
+ERP 在国内，采集器设计为**低频定时同步**（如每天 1 次成本/库存），做好超时重试；若分析层部署在海外，ERP 取数走拆分方案（采集在国内出 CSV，海外只消费）。
 
 ### 密钥与配置管理
 API key、ERP 凭证、数据库密码**严禁写死**在代码或配置样例里。从第一版起：
