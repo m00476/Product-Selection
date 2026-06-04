@@ -117,3 +117,26 @@ def insert_sales_snapshot(conn: psycopg.Connection, product_id: int, snap: Sales
              snap.metric_source, raw_id),
         )
     conn.commit()
+
+
+def link_source_record(conn: psycopg.Connection, p: NormalizedProduct, *,
+                       product_id: int, raw_id: int | None) -> None:
+    link_type = "deterministic" if p.platform_product_id else "fuzzy_pending"
+    confidence = 1.0 if p.platform_product_id else 0.0
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO source_product_links
+                (source, source_record_id, raw_source_record_id, platform,
+                 platform_product_id, canonical_url, product_id, link_type, confidence)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (source, source_record_id) DO UPDATE SET
+                product_id = EXCLUDED.product_id,
+                raw_source_record_id = EXCLUDED.raw_source_record_id,
+                link_type = EXCLUDED.link_type,
+                confidence = EXCLUDED.confidence
+            """,
+            (p.source, p.source_record_id, raw_id, p.platform, p.platform_product_id,
+             p.canonical_url, product_id, link_type, confidence),
+        )
+    conn.commit()
