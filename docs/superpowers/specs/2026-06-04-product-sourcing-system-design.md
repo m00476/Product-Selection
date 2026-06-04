@@ -65,7 +65,7 @@
             │
             ▼
   ② 数据仓库 PostgreSQL
-     原始表 raw_* → 标准表 products/prices/sales/reviews/erp_skus
+     raw_source_records → 标准表 products/price_snapshots/sales_snapshots/reviews/erp_skus
             │
             ▼
   ③ 分析层 Analyzers
@@ -95,14 +95,15 @@
 |---|---|---|
 | `id` | bigserial PK | 主键 |
 | `source` | text | `seerfar` / `ixspy` / `erp` / 未来新源 |
+| `platform` | text | 该记录所属平台 `aliexpress`/`ozon`/`erp`（避免跨平台 sku 冲突） |
 | `product_type` | text | 抓取品类（PRODUCT_TYPE 分批） |
-| `source_file` | text | 来源 CSV/JSON 文件路径（可溯源到具体 fetch 产物） |
-| `source_record_id` | text | 源内记录标识；供 `source_product_links.source_record_id` 引用 |
+| `source_file` | text | 来源文件**相对路径/逻辑名**（如 `input/seerfar/xiongzhen/seerfar_products.csv`，**不存绝对路径/机器信息**） |
+| `source_record_id` | text | 源内记录标识；供 `source_product_links` 引用 |
 | `raw_payload` | jsonb | **仅业务响应数据**，详见下方脱敏边界 |
-| `payload_hash` | text | `raw_payload` 哈希，用于去重/识别变化 |
+| `payload_hash` | text | `raw_payload` 哈希，用于识别字段变化 |
 | `collected_at` | timestamptz | 抓取时间 |
 
-唯一键 `(source, source_record_id)`；`payload_hash` 用于幂等 upsert。
+**append-only，不覆盖历史**：唯一键 `(source, platform, source_record_id, collected_at)`，同一商品多次采集保留多条，用于趋势与字段变化回溯。去重策略：若某 `(source, platform, source_record_id)` 最新一条的 `payload_hash` 与本次相同则**跳过插入**（避免存完全相同的重复行），只在内容变化时新增历史记录——既留历史又不冗余。
 
 **raw 数据脱敏与权限边界（强制）：**
 - `raw_payload` **只存业务响应**（商品字段），**严禁存 cookie / 请求头 / token / 登录凭证**。probe 捕获的请求头/cookie 仅用于 fetch 运行期，不入数据库。
@@ -113,14 +114,16 @@
 | 表 | 内容 | 关键字段 |
 |---|---|---|
 | `products` | 全部商品（竞品+自家） | product_id（内部统一）、平台、平台商品ID、标题、类目、主图url、品牌、is_own |
-| `price_snapshots` | 价格快照（按时间累积） | product_id、价格、币种、抓取时间 |
-| `sales_snapshots` | 销量/评论/评分快照 | product_id、销量、评论数、评分、抓取时间 |
-| `reviews` | 评论明细（差评挖掘） | product_id、评分、内容、时间 |
-| `erp_skus` | 自家 SKU 成本/库存 | sku、成本价、库存、关联 product_id |
+| `price_snapshots` | 价格快照（按时间累积） | product_id、source、platform、platform_product_id、price、currency、**observed_at**、collected_at、metric_source、raw_source_record_id |
+| `sales_snapshots` | 销量/评论/评分快照 | product_id、source、platform、platform_product_id、sales、review_count、review_rating、**observed_at**、collected_at、**metric_source**、raw_source_record_id |
+| `reviews` | 评论明细（差评挖掘） | product_id、source、评分、内容、observed_at、collected_at |
+| `erp_skus` | 自家 SKU 成本/库存 | sku、own_product_id、成本价、加权采购/运费/分拣、库存、一次毛利、关联 product_id |
 
-快照表（`price_snapshots`、`sales_snapshots`）必须定义**幂等与去重规则**：
-- 唯一约束 `(platform, platform_product_id, observed_at)`，重复抓取以 upsert 处理，避免重复数据污染趋势/预警。
-- 区分两个时间字段：`observed_at`（数据反映的业务时点）与 `collected_at`（我们实际抓取的时点）。
+快照表（`price_snapshots`、`sales_snapshots`）的**幂等与去重规则**：
+- 唯一约束 `(source, platform, platform_product_id, observed_at)`，重复抓取以 upsert 处理，避免重复数据污染趋势/预警（加 `source` 防多源同平台冲突）。
+- 区分两个时间字段：`observed_at`（数据反映的业务时点）与 `collected_at`（实际抓取时点）。
+- `metric_source` 标记指标来源（如 `seerfar_estimated` vs ERP 真实值），见 §4.1，避免估算与真实值混用。
+- `raw_source_record_id` 回指 `raw_source_records`，每个快照可追溯到原始记录。
 
 ### 运维层（采集运行与失败追踪）
 | 表 | 内容 |
@@ -167,6 +170,7 @@
 | `id` | bigserial PK | 主键 |
 | `source` | text | 数据源：`seerfar` / `ixspy` / 未来新源 |
 | `source_record_id` | text | 源内记录标识（Seerfar/IXSPY 的 sku；无则用 hash(canonical_url)） |
+| `raw_source_record_id` | bigint FK→raw_source_records.id | **直接指向产生本条的原始记录**，明确追溯，不靠文本字段猜 |
 | `platform` | text | 归属平台：`aliexpress` / `ozon`（URL 规范化得出） |
 | `platform_product_id` | text | 平台商品 ID（URL 规范化得出；可空→走模糊匹配） |
 | `canonical_url` | text | 规范化后的 URL（见 §4.1.3） |
