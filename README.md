@@ -19,8 +19,14 @@ python -c "from sourcing import config, db; c=db.connect(config.database_url());
 
 ## 导入数据
 ```powershell
-python -m sourcing.cli --source seerfar --path <CSV路径> --product-type <品类>
+python -m sourcing.cli import --source seerfar --path <CSV路径> --product-type <品类>
 ```
+
+## 计算利润与机会分
+```powershell
+python -m sourcing.cli analyze
+```
+结果写入 `profit_estimates`、`opportunity_scores` 两张表。
 
 ## 测试
 ```powershell
