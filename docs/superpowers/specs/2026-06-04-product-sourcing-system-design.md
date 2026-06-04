@@ -140,6 +140,55 @@
 4. **置信约束**：关联置信度低时**不得直接合并销量与利润**；机会分（§6）**只使用"确定关联"或"高置信关联"的数据**，否则在看板标注"数据来源不完整"。
 5. Ozon 竞品目前 Seerfar 单源即覆盖，无需跨源合并；该规则主要服务 AliExpress（Seerfar × IXSPY）及未来新源。
 
+### 4.1.1 `source_product_links` 表结构
+
+每条来自任一源的竞品记录对应一行，归一化到一个 `products.product_id`：
+
+| 列 | 类型 | 说明 |
+|---|---|---|
+| `id` | bigserial PK | 主键 |
+| `source` | text | 数据源：`seerfar` / `ixspy` / 未来新源 |
+| `source_record_id` | text | 源内记录标识（Seerfar/IXSPY 的 sku；无则用 hash(canonical_url)） |
+| `platform` | text | 归属平台：`aliexpress` / `ozon`（URL 规范化得出） |
+| `platform_product_id` | text | 平台商品 ID（URL 规范化得出；可空→走模糊匹配） |
+| `canonical_url` | text | 规范化后的 URL（见 §4.1.3） |
+| `product_id` | bigint FK→products | 归一化到的统一商品；模糊匹配未确认前可空 |
+| `link_type` | text | `deterministic`（按 ID 关联）/ `fuzzy_pending` / `fuzzy_confirmed` / `fuzzy_rejected` |
+| `confidence` | numeric | 关联置信度（确定关联=1.0） |
+| `collected_at` | timestamptz | 该源记录抓取时间 |
+
+**约束**：
+- 唯一键 `(source, source_record_id)`：同源同记录只一行，重复抓取 upsert。
+- 唯一键 `(platform, platform_product_id)` 在 `products` 上：确定关联以它为合并锚点（`platform_product_id` 非空时）。
+- `platform_product_id` 为空的记录不参与确定关联，只走 §5 模糊匹配。
+
+### 4.1.2 字段合并优先级（同一 listing 多源冲突时取谁）
+
+合并成一个 `products` + 快照行时，按字段定"权威源"：
+
+| 字段类别 | 权威源 | 说明 |
+|---|---|---|
+| 销量/收入/排名/转化率/退货率/评分增量（sales、revenue、salesRate、categoryRank、orderConversionRate、returnCancellationRate、reviewIncr…） | **Seerfar** | 市场指标只有 Seerfar 有，直接采用 |
+| 评论数/评分（reviewCount、reviewRating） | **Seerfar** | |
+| 规格（weight、dimension、volume、variants） | **Seerfar** | |
+| 商品详情（title、image、category、brand、seller） | AliExpress→**IXSPY** 优先（更贴近真实 listing，Seerfar 标题常被本地化/翻译）；Ozon→**Seerfar**（无 IXSPY 源） | 缺失时回退另一源 |
+| 价格（price） | **最新 `collected_at` 的记录**；同时间则 Seerfar | 价格随时间变，按时序入 `price_snapshots` |
+
+规则：写入标准层时，每个被采用的值记录其来源源名；各源原始记录始终完整保留在 `raw_*`，便于回溯与改判。
+
+### 4.1.3 URL 规范化规则（抽取 platform + platform_product_id）
+
+对每条记录的 `productUrl` 按以下步骤产出 `canonical_url`、`platform`、`platform_product_id`：
+
+1. 转小写 host；去掉 `https?://`、`www.`/`m.` 前缀；去掉 `?query` 与 `#fragment`；去掉末尾 `/`。
+2. **平台判定**（按 host）：含 `ozon.ru`→`ozon`；含 `aliexpress`（任意 TLD/子域，如 .com/.ru/.us）→`aliexpress`；其它→`unknown`。
+3. **抽取 ID**：
+   - Ozon：正则 `/product/(?:[^/]*-)?(\d+)`（兼容 `…/product/3637903008` 与带 slug 的 `…/product/asus-zenbook-3637903008`），取末尾数字。
+   - AliExpress：正则 `/item/(\d+)\.html`（去 query 后），取数字。
+4. `canonical_url` 统一为平台规范形式：Ozon→`https://www.ozon.ru/product/{id}`；AliExpress→`https://www.aliexpress.com/item/{id}.html`。
+5. 任一步无法解析出 ID → `platform_product_id = null`，该记录交 §5 模糊匹配。
+6. 边界：解析失败、平台 `unknown`、ID 非纯数字等情况记日志（`collector_errors`），不静默丢弃。
+
 **附带改进**：现有 `seerfar_api_fetch.py` 的 flatten 丢弃了原始响应中的 `profit、grossMargin、categoryRank、naturalRank、adRank、orderConversionRate、returnCancellationRate、views、missedRevenue` 等有价值字段，扩展解析时一并纳入（对机会打分有用）。
 
 ## 5. 商品匹配引擎（核心难点）
