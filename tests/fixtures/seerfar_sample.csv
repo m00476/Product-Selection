@@ -1,0 +1,3 @@
+source_rank,sku,product_name,brand,category,image_url,product_url,price,seller_id,seller_name,sales,review_count,review_rating
+1,3637903008,ASUS Zenbook 14,ASUS,Electronics > Laptop,https://img/x.jpg,https://www.ozon.ru/product/3637903008,91510.0,1865500,SellerX,553,28,5.0
+2,1005006,Mini Speaker,Generic,Electronics > Audio,https://img/y.jpg,https://www.aliexpress.com/item/1005006.html?spm=a2,12.5,777,SellerY,2000,150,4.6
