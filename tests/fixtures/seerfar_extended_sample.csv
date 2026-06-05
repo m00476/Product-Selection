@@ -1,0 +1,2 @@
+source_rank,sku,product_name,brand,category,image_url,product_url,price,seller_id,seller_name,sales,review_count,review_rating,gross_margin,views,order_conversion_rate,raw_json
+1,3724157436,"Training Mask",,Training Mask,https://img/x.jpg,https://www.ozon.ru/product/3724157436,782.0,4214626,Seller,8,0,0.0,54.9,3804,41.2,"{""grossMargin"": 54.9, ""views"": 3804, ""orderConversionRate"": 41.2}"
