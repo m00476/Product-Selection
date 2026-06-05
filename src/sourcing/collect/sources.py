@@ -4,19 +4,24 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class SourceSpec:
-    probe_script: str
-    fetch_script: str
+    probe_script: str | None
+    fetch_script: str | None
     output_subdir: str
     output_filename: str
+    probe_module: str | None = None
+    fetch_module: str | None = None
 
 
 SOURCE_SPECS = {
-    "seerfar": SourceSpec("apipy/seerfar_api_probe.py", "apipy/seerfar_api_fetch.py",
-                          "seerfar", "seerfar_products.csv"),
-    "ixspy": SourceSpec("apipy/aliexpress_api_probe.py", "apipy/aliexpress_api_fetch.py",
-                        "aliexpress", "aliexpress_products.csv"),
-    "erp": SourceSpec("apipy/erp_api_probe.py", "apipy/erp_api_fetch.py",
-                      "erp", "erp_products.csv"),
+    "seerfar": SourceSpec(None, None, "seerfar", "seerfar_products.csv",
+                          probe_module="sourcing.collect.seerfar_api_probe",
+                          fetch_module="sourcing.collect.seerfar_api_fetch"),
+    "ixspy": SourceSpec(None, None, "aliexpress", "aliexpress_products.csv",
+                        probe_module="sourcing.collect.aliexpress_api_probe",
+                        fetch_module="sourcing.collect.aliexpress_api_fetch"),
+    "erp": SourceSpec(None, None, "erp", "erp_products.csv",
+                      probe_module="sourcing.collect.erp_api_probe",
+                      fetch_module="sourcing.collect.erp_api_fetch"),
 }
 
 
