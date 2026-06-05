@@ -36,8 +36,46 @@ python -m sourcing.cli analyze
 ```
 结果写入 `profit_estimates`、`opportunity_scores` 两张表。
 
-## 采集（调用 518 脚本并入库）
-凭证放在 `518` 项目根的 `.env`（脚本自读）。本系统只负责编排：
+## ERP 内置采集
+ERP API fetch 已迁入本项目，类目配置在 `configs/erp_categories.yaml`。运行示例：
+```powershell
+cd D:\ProductSourcingSystem
+$env:PRODUCT_TYPE="bag_accessories"
+$env:ERP_USERNAME="你的ERP用户名"
+$env:ERP_PASSWORD="你的ERP密码"
+python -m sourcing.collect.erp_api_probe
+$env:ERP_API_TARGET_COUNT="100"
+python -m sourcing.collect.erp_api_fetch
+```
+输出到 `input\erp\<PRODUCT_TYPE>\erp_products.csv`。如果 `output\erp\<PRODUCT_TYPE>\erp_api_candidates.json`
+里的登录凭证过期，需要先运行 probe 刷新候选请求，再运行 fetch。
+
+## AliExpress/IXSPY 内置采集
+IXSPY 的 AliExpress probe/fetch 也已迁入本项目。运行示例：
+```powershell
+cd D:\ProductSourcingSystem
+$env:PRODUCT_TYPE="bag_accessories"
+$env:ALIEXPRESS_CATEGORY_NAME="箱包配件"
+python -m sourcing.collect.aliexpress_api_probe
+$env:ALIEXPRESS_API_TARGET_COUNT="100"
+python -m sourcing.collect.aliexpress_api_fetch
+```
+输出到 `input\aliexpress\<PRODUCT_TYPE>\aliexpress_products.csv`。
+
+## Seerfar/Ozon 内置采集
+Seerfar probe/fetch 已迁入本项目。运行示例：
+```powershell
+cd D:\ProductSourcingSystem
+$env:PRODUCT_TYPE="training_mask"
+$env:SEERFAR_CATEGORY_NAME="运动与休闲 > 装备与护具 > 训练面罩"
+python -m sourcing.collect.seerfar_api_probe
+$env:SEERFAR_API_TARGET_COUNT="100"
+python -m sourcing.collect.seerfar_api_fetch
+```
+输出到 `input\seerfar\<PRODUCT_TYPE>\seerfar_products.csv`。如果 fetch 返回 401，需要先运行 probe 刷新候选请求。
+
+## 采集编排
+三个源的采集模块已内置。本系统可以统一编排：
 ```powershell
 # 单个源×品类
 python -m sourcing.cli collect --source seerfar --product-type xiongzhen
@@ -50,7 +88,7 @@ python -m sourcing.cli collect --all
 ### 定时（Windows 任务计划）
 新建基本任务，操作设为：
 `程序` = `python`，`参数` = `-m sourcing.cli collect --all`，`起始于` = 项目目录 `D:\ProductSourcingSystem`。
-建议每天凌晨触发；采集依赖 Chrome/Chromedriver 与 518/.env 凭证。
+建议每天凌晨触发；采集依赖 Chrome/Chromedriver 与本项目 `.env` 凭证。
 
 ## 导入 518 已抓竞品（让匹配能对齐）
 518 已抓的竞品在 `app.db` 的 `external_products`。把它们导入本系统（按 product_url
@@ -81,4 +119,6 @@ pytest -v
 ```
 
 ## 数据来源
-取数脚本在 `C:\Users\aibp\Desktop\518\apipy`（Selenium 探测+接口回放，产出 CSV 到 `input/<源>/<品类>/`）。本系统消费这些 CSV，不直接抓取。
+ERP、AliExpress/IXSPY、Seerfar/Ozon API probe/fetch 均已在本项目内置，分别输出到
+`input/erp/<品类>/`、`input/aliexpress/<品类>/`、`input/seerfar/<品类>/`。
+`C:\Users\aibp\Desktop\518` 仍可作为历史数据和匹配结果桥接来源。

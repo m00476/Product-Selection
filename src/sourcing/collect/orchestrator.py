@@ -33,12 +33,20 @@ def collect_target(conn: psycopg.Connection, source: str, product_type: str, *,
     env = _build_env(source, product_type)
     run_id = start_collector_run(conn, source, product_type)
 
+    commands = []
     for script in (spec.probe_script, spec.fetch_script):
-        result = runner.run([python_exe, os.path.join(base_dir, script)],
-                            cwd=base_dir, env=env)
+        if script:
+            commands.append(([python_exe, os.path.join(base_dir, script)], script))
+    if spec.probe_module:
+        commands.append(([python_exe, "-m", spec.probe_module], spec.probe_module))
+    if spec.fetch_module:
+        commands.append(([python_exe, "-m", spec.fetch_module], spec.fetch_module))
+
+    for args, label in commands:
+        result = runner.run(args, cwd=base_dir, env=env)
         if result.returncode != 0:
             record_collector_error(conn, run_id, source,
-                                   f"{script} exited {result.returncode}",
+                                   f"{label} exited {result.returncode}",
                                    (result.stderr or "")[:2000])
             finish_collector_run(conn, run_id, status="failed", record_count=0)
             return {"status": "failed", "source": source, "product_type": product_type}

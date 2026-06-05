@@ -5,6 +5,8 @@ requires-python = ">=3.12"
 dependencies = [
     "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
+    "selenium>=4.15.0",
+    "webdriver-manager>=4.0.0",
 ]
 
 [project.optional-dependencies]

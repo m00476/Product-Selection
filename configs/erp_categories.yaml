@@ -1,0 +1,7 @@
+bag_accessories:
+  name: 箱包配件
+  first_catalogue_id: "75004736"
+  second_catalogue_id: "2016080911304904065109"
+  accepted_categories:
+    - 箱包配件
+    - 包部件
