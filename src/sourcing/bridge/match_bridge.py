@@ -16,11 +16,17 @@ def normalize_status(raw: str | None) -> str:
 
 
 def _find_competitor(conn, platform, external_product_id):
+    # 注意：518 的 platform 是"来源"标签(如 seerfar)，本系统 platform 是真实市场
+    # (ozon/aliexpress，从商品URL推导)，二者不一致。external_product_id 才是市场商品ID，
+    # 等同本系统 platform_product_id，故只按它匹配（platform 参数不参与过滤）。
+    if not external_product_id:
+        return None
     with conn.cursor() as cur:
         cur.execute(
             "SELECT product_id FROM products "
-            "WHERE is_own = false AND platform = %s AND platform_product_id = %s",
-            (platform, external_product_id),
+            "WHERE is_own = false AND platform_product_id = %s "
+            "ORDER BY product_id LIMIT 1",
+            (external_product_id,),
         )
         row = cur.fetchone()
     return row[0] if row else None

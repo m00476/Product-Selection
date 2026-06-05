@@ -68,6 +68,17 @@ def test_bridge_rows_maps_and_links(conn):
         assert float(row[3]) == 12.3  # final_score 是 NUMERIC，按 float 比较
 
 
+def test_bridge_matches_by_id_across_platform_label(conn):
+    # 518 用 source 标签 'seerfar'，本系统竞品是 'ozon'；应按 商品ID 桥接成功
+    comp, own = _seed(conn)  # 本系统竞品 platform='ozon', platform_product_id='900'
+    rows = [MatchRow("seerfar", "900", "SKU1", None, None, None, None, 9.0, "matched")]
+    summary = bridge_rows(conn, rows)
+    assert summary["bridged"] == 1
+    with conn.cursor() as cur:
+        cur.execute("SELECT competitor_product_id, status FROM product_matches")
+        assert cur.fetchone() == (comp, "confirmed")
+
+
 def test_bridge_no_erp_match_keeps_null_own(conn):
     comp, _ = _seed(conn)
     rows = [MatchRow("ozon", "900", "", None, None, None, None, 5.0, "ERP里没有")]
