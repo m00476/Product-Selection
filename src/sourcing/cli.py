@@ -4,6 +4,7 @@ from sourcing import config, db
 from sourcing.importer import import_erp_csv, import_ixspy_csv, import_seerfar_csv
 from sourcing.analysis.run import run_analysis
 from sourcing.quality import inspect_csv_quality
+from sourcing.collect.orchestrator import collect_all
 
 
 def main() -> None:
@@ -22,7 +23,14 @@ def main() -> None:
 
     sub.add_parser("analyze", help="计算利润估算与机会分")
 
+    col = sub.add_parser("collect", help="调用采集脚本产出CSV并导入")
+    col.add_argument("--source", choices=["seerfar", "ixspy", "erp"],
+                     help="单个源（与 --product-type 一起用）")
+    col.add_argument("--product-type", help="单个品类")
+    col.add_argument("--all", action="store_true", help="按 COLLECT_TARGETS 采集全部")
+
     args = parser.parse_args()
+
     if args.command == "quality":
         report = inspect_csv_quality(args.path, source=args.source, product_type=args.product_type)
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -42,6 +50,15 @@ def main() -> None:
         elif args.command == "analyze":
             summary = run_analysis(conn)
             print(f"[DONE] analyzed: {summary}")
+        elif args.command == "collect":
+            if args.all:
+                targets = config.collect_targets()
+            elif args.source and args.product_type:
+                targets = [(args.source, args.product_type)]
+            else:
+                raise SystemExit("collect 需要 --all，或同时给 --source 与 --product-type")
+            results = collect_all(conn, targets, base_dir=config.collect_base_dir())
+            print(f"[DONE] collected: {results}")
     finally:
         conn.close()
 

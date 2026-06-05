@@ -36,6 +36,22 @@ python -m sourcing.cli analyze
 ```
 结果写入 `profit_estimates`、`opportunity_scores` 两张表。
 
+## 采集（调用 518 脚本并入库）
+凭证放在 `518` 项目根的 `.env`（脚本自读）。本系统只负责编排：
+```powershell
+# 单个源×品类
+python -m sourcing.cli collect --source seerfar --product-type xiongzhen
+# 按 .env 的 COLLECT_TARGETS 全部采集
+python -m sourcing.cli collect --all
+```
+配置（`.env`）：`COLLECT_518_DIR`（518 根目录）、`COLLECT_TARGETS`（如 `seerfar:xiongzhen,erp:xiongzhen`）。
+每次运行记录在 `collector_runs` / `collector_errors`。
+
+### 定时（Windows 任务计划）
+新建基本任务，操作设为：
+`程序` = `python`，`参数` = `-m sourcing.cli collect --all`，`起始于` = 项目目录 `D:\ProductSourcingSystem`。
+建议每天凌晨触发；采集依赖 Chrome/Chromedriver 与 518/.env 凭证。
+
 ## 测试
 ```powershell
 pytest -v
