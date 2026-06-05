@@ -120,3 +120,17 @@ def test_cli_bridge_matches(monkeypatch):
     )
     cli.main()
     assert calls["path"] == "/x/app.db"
+
+
+def test_cli_import_external(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", ["sourcing.cli", "import-external"])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "app_db_path", lambda: "/x/app.db")
+    monkeypatch.setattr(
+        cli, "import_external_products",
+        lambda conn, path: calls.update(path=path) or {"imported": 4, "skipped_no_id": 1},
+    )
+    cli.main()
+    assert calls["path"] == "/x/app.db"
