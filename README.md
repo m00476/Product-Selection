@@ -68,6 +68,13 @@ python -m sourcing.cli bridge-matches
 配置 `.env` 的 `APP_DB_PATH` 指向 518 的 app.db。`status` 取值：
 `confirmed`（已匹配自家 SKU）、`no_erp_match`（竞品在 ERP 无对应 = 选品机会）、`pending` / `rejected`。
 
+## 看板（Metabase）
+SQL 视图 `v_opportunities`（选品机会）、`v_competitor_monitor`（竞品监控）已就绪。
+搭建步骤见 `docs/metabase-dashboards.md`。
+```powershell
+docker compose up -d metabase   # http://localhost:3000
+```
+
 ## 测试
 ```powershell
 pytest -v
