@@ -13,6 +13,14 @@ services:
     image: metabase/metabase:latest
     ports:
       - "3000:3000"
+    environment:
+      # 用 PostgreSQL 当 Metabase 自己的应用库 -> 配置/看板随 pgdata 卷持久化
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: metabase_app
+      MB_DB_PORT: 5432
+      MB_DB_USER: sourcing
+      MB_DB_PASS: sourcing
+      MB_DB_HOST: postgres
     depends_on:
       - postgres
 volumes:
