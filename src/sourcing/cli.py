@@ -7,6 +7,7 @@ from sourcing.quality import inspect_csv_quality
 from sourcing.collect.orchestrator import collect_all
 from sourcing.bridge.run import bridge_matches
 from sourcing.bridge.external_importer import import_external_products
+from sourcing.bridge.image_decisions import load_image_decisions
 
 
 def main() -> None:
@@ -45,6 +46,10 @@ def main() -> None:
     img_report.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
     img_report.add_argument("--product-type", required=True)
     img_report.add_argument("--base-dir", default=".", help="以图搜索结果所在项目目录")
+
+    img_load = sub.add_parser("erp-image-load-db", help="把 ERP 图搜老板决策落进 PostgreSQL")
+    img_load.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    img_load.add_argument("--product-type", required=True)
 
     args = parser.parse_args()
 
@@ -102,6 +107,11 @@ def main() -> None:
         elif args.command == "import-external":
             summary = import_external_products(conn, config.app_db_path())
             print(f"[DONE] imported external: {summary}")
+        elif args.command == "erp-image-load-db":
+            summary = load_image_decisions(
+                conn, source=args.source, product_type=args.product_type,
+                base_dir=config.collect_base_dir())
+            print(f"[DONE] image decisions loaded: {summary}")
     finally:
         conn.close()
 

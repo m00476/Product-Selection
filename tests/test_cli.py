@@ -201,3 +201,20 @@ def test_cli_erp_image_decision_report_defaults_to_current_project(monkeypatch):
     cli.main()
 
     assert calls["base_dir"] == "."
+
+
+def test_cli_erp_image_load_db(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-load-db", "--source", "ixspy", "--product-type", "bags",
+    ])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(
+        cli, "load_image_decisions",
+        lambda conn, *, source, product_type, base_dir:
+            calls.update(source=source, product_type=product_type, base_dir=base_dir) or {"loaded": 7},
+    )
+    cli.main()
+    assert calls == {"source": "ixspy", "product_type": "bags", "base_dir": "/base518"}
