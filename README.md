@@ -20,7 +20,15 @@ python -c "from sourcing import config, db; c=db.connect(config.database_url());
 ## 导入数据
 ```powershell
 python -m sourcing.cli import --source seerfar --path <CSV路径> --product-type <品类>
+python -m sourcing.cli import --source ixspy --path <CSV路径> --product-type <品类>
+python -m sourcing.cli import --source erp --path <CSV路径> --product-type <品类>
 ```
+
+## 检查 CSV 数据质量
+```powershell
+python -m sourcing.cli quality --source ixspy --path <CSV路径> --product-type <品类>
+```
+用于查看缺失 URL、价格、ERP 成本/库存、无法确定关联等问题。
 
 ## 计算利润与机会分
 ```powershell

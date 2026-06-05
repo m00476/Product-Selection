@@ -19,3 +19,16 @@ def test_seerfar_reader_maps_fields_and_platform():
     assert prices[0].metric_source == "seerfar"
     assert sales[0].sales == 553
     assert sales[0].review_count == 28
+
+
+def test_seerfar_reader_keeps_extended_estimated_metrics():
+    products, _prices, sales = read_seerfar(
+        "tests/fixtures/seerfar_extended_sample.csv",
+        product_type="training_mask",
+    )
+
+    product = products[0]
+    assert product.extra_metrics["gross_margin"] == 54.9
+    assert product.extra_metrics["views"] == 3804
+    assert product.extra_metrics["order_conversion_rate"] == 41.2
+    assert sales[0].metric_source == "seerfar"

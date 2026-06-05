@@ -140,3 +140,39 @@ def link_source_record(conn: psycopg.Connection, p: NormalizedProduct, *,
              p.canonical_url, product_id, link_type, confidence),
         )
     conn.commit()
+
+
+def find_erp_product_id(conn: psycopg.Connection, sku: str) -> int | None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT own_product_id FROM erp_skus WHERE sku=%s", (sku,))
+        row = cur.fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def upsert_erp_sku(conn: psycopg.Connection, sku: dict, product_id: int) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO erp_skus
+                (sku, own_product_id, cost_price, weighted_purchase, weighted_freight,
+                 weighted_sorting, stock, once_gross_margin, main_platform)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (sku) DO UPDATE SET
+                own_product_id=EXCLUDED.own_product_id,
+                cost_price=EXCLUDED.cost_price,
+                weighted_purchase=EXCLUDED.weighted_purchase,
+                weighted_freight=EXCLUDED.weighted_freight,
+                weighted_sorting=EXCLUDED.weighted_sorting,
+                stock=EXCLUDED.stock,
+                once_gross_margin=EXCLUDED.once_gross_margin,
+                main_platform=EXCLUDED.main_platform,
+                updated_at=now()
+            """,
+            (
+                sku["sku"], product_id, sku.get("cost_price"),
+                sku.get("weighted_purchase"), sku.get("weighted_freight"),
+                sku.get("weighted_sorting"), sku.get("stock"),
+                sku.get("once_gross_margin"), sku.get("main_platform"),
+            ),
+        )
+    conn.commit()

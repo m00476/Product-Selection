@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 
@@ -17,6 +17,7 @@ class NormalizedProduct:
     seller_id: str | None = None
     seller_name: str | None = None
     is_own: bool = False
+    extra_metrics: dict = field(default_factory=dict)
 
 
 @dataclass
