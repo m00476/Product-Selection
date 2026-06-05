@@ -112,6 +112,7 @@ SQL 视图 `v_opportunities`（选品机会）、`v_competitor_monitor`（竞品
 ```powershell
 docker compose up -d metabase   # http://localhost:3000
 ```
+新增视图 `v_erp_image_decisions`（ERP 图搜查重决策）。流程：`erp-image-search` → `erp-image-load-db` → Metabase。
 
 ## 测试
 ```powershell
