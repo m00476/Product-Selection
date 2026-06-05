@@ -5,6 +5,7 @@ from sourcing.importer import import_erp_csv, import_ixspy_csv, import_seerfar_c
 from sourcing.analysis.run import run_analysis
 from sourcing.quality import inspect_csv_quality
 from sourcing.collect.orchestrator import collect_all
+from sourcing.bridge.run import bridge_matches
 
 
 def main() -> None:
@@ -28,6 +29,8 @@ def main() -> None:
                      help="单个源（与 --product-type 一起用）")
     col.add_argument("--product-type", help="单个品类")
     col.add_argument("--all", action="store_true", help="按 COLLECT_TARGETS 采集全部")
+
+    sub.add_parser("bridge-matches", help="把 518 匹配结果桥接进 product_matches")
 
     args = parser.parse_args()
 
@@ -59,6 +62,9 @@ def main() -> None:
                 raise SystemExit("collect 需要 --all，或同时给 --source 与 --product-type")
             results = collect_all(conn, targets, base_dir=config.collect_base_dir())
             print(f"[DONE] collected: {results}")
+        elif args.command == "bridge-matches":
+            summary = bridge_matches(conn, config.app_db_path())
+            print(f"[DONE] bridged: {summary}")
     finally:
         conn.close()
 
