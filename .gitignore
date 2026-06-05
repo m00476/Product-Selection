@@ -8,3 +8,5 @@ output/
 *.egg-info/
 .pytest_cache/
 .worktrees/
+# 含本地密码的一次性 provision 脚本，勿提交
+scripts/provision_metabase.py
