@@ -6,6 +6,7 @@ from sourcing.analysis.run import run_analysis
 from sourcing.quality import inspect_csv_quality
 from sourcing.collect.orchestrator import collect_all
 from sourcing.bridge.run import bridge_matches
+from sourcing.bridge.external_importer import import_external_products
 
 
 def main() -> None:
@@ -31,6 +32,8 @@ def main() -> None:
     col.add_argument("--all", action="store_true", help="按 COLLECT_TARGETS 采集全部")
 
     sub.add_parser("bridge-matches", help="把 518 匹配结果桥接进 product_matches")
+
+    sub.add_parser("import-external", help="把 518 已抓的竞品(external_products)导入本系统")
 
     args = parser.parse_args()
 
@@ -65,6 +68,9 @@ def main() -> None:
         elif args.command == "bridge-matches":
             summary = bridge_matches(conn, config.app_db_path())
             print(f"[DONE] bridged: {summary}")
+        elif args.command == "import-external":
+            summary = import_external_products(conn, config.app_db_path())
+            print(f"[DONE] imported external: {summary}")
     finally:
         conn.close()
 
