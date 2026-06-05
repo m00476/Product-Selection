@@ -10,7 +10,31 @@ def test_flatten_aliexpress_record_builds_url_from_numeric_sku():
 
     assert row["sku"] == "1005012068000940"
     assert row["product_url"] == "https://www.aliexpress.com/item/1005012068000940.html"
-    assert row["price"] == "1.33"
+
+
+def test_flatten_aliexpress_record_exports_market_metrics():
+    row = aliexpress_api_fetch.flatten_aliexpress_record(
+        {
+            "product_id": "1005012068000940",
+            "product_name": "Home Fan",
+            "product_price": "12.34",
+            "trade_total": "321",
+            "trade_7_count": "45",
+            "review_total": "67",
+            "ratings": "4.8",
+            "store_name": "Home Store",
+            "feedback": {"positive_rate": "96.5"},
+        },
+        source_rank=1,
+    )
+
+    assert row["sales"] == "321"
+    assert row["sales_7d"] == "45"
+    assert row["review_count"] == "67"
+    assert row["rating"] == "4.8"
+    assert row["seller_name"] == "Home Store"
+    assert row["seller_positive_rate"] == "96.5"
+    assert row["price"] == "12.34"
 
 
 def test_validate_output_rows_rejects_empty_and_visible_fallback_rows():
