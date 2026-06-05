@@ -1,6 +1,6 @@
 import argparse
 import json
-from sourcing import config, db
+from sourcing import config, db, erp_image_search
 from sourcing.importer import import_erp_csv, import_ixspy_csv, import_seerfar_csv
 from sourcing.analysis.run import run_analysis
 from sourcing.quality import inspect_csv_quality
@@ -35,11 +35,42 @@ def main() -> None:
 
     sub.add_parser("import-external", help="把 518 已抓的竞品(external_products)导入本系统")
 
+    img = sub.add_parser("erp-image-search", help="用外部商品图片调用 ERP 以图搜索")
+    img.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    img.add_argument("--product-type", required=True)
+    img.add_argument("--limit", type=int, default=20, help="小样本数量；正式跑可调大")
+    img.add_argument("--delay", type=float, default=0.5, help="每张图片之间的等待秒数")
+
+    img_report = sub.add_parser("erp-image-decision-report", help="把 ERP 以图搜索结果汇总成老板决策表")
+    img_report.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    img_report.add_argument("--product-type", required=True)
+    img_report.add_argument("--base-dir", default=".", help="以图搜索结果所在项目目录")
+
     args = parser.parse_args()
 
     if args.command == "quality":
         report = inspect_csv_quality(args.path, source=args.source, product_type=args.product_type)
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
+        return
+
+    if args.command == "erp-image-search":
+        summary = erp_image_search.run_image_search(
+            source=args.source,
+            product_type=args.product_type,
+            base_dir=config.collect_base_dir(),
+            limit=args.limit,
+            delay_seconds=args.delay,
+        )
+        print(f"[DONE] ERP image searched: {summary}")
+        return
+
+    if args.command == "erp-image-decision-report":
+        summary = erp_image_search.generate_boss_decision_report(
+            source=args.source,
+            product_type=args.product_type,
+            base_dir=args.base_dir,
+        )
+        print(f"[DONE] ERP image decision report: {summary}")
         return
 
     conn = db.connect(config.database_url())

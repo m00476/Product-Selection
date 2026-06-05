@@ -138,6 +138,13 @@ def flatten_aliexpress_record(record, source_rank=None):
         ),
         "price": first_value(record, ["price", "salePrice", "productPrice", "product_price", "minPrice", "amount"]),
         "product_url": product_url,
+        "sales": first_value(record, ["sales", "trade_total", "tradeTotal", "order_count", "orders"]),
+        "sales_7d": first_value(record, ["sales_7d", "trade_7_count", "trade7Count", "recent_sales"]),
+        "review_count": first_value(record, ["review_count", "review_total", "reviewTotal", "reviews"]),
+        "rating": first_value(record, ["rating", "ratings", "review_rating", "reviewRating"]),
+        "seller_id": first_value(record, ["seller_id", "store_id", "storeId", "shopId"]),
+        "seller_name": first_value(record, ["seller_name", "store_name", "storeName", "shopName"]),
+        "seller_positive_rate": nested_first_value(record, [["feedback", "positive_rate"]]),
     }
 
 
@@ -260,7 +267,11 @@ def fetch_pages(method, url, headers, body):
 
 
 def output_fields():
-    return ["source_rank", "sku", "product_name", "brand", "category", "image_url", "price", "product_url"]
+    return [
+        "source_rank", "sku", "product_name", "brand", "category", "image_url",
+        "price", "product_url", "sales", "sales_7d", "review_count", "rating",
+        "seller_id", "seller_name", "seller_positive_rate",
+    ]
 
 
 def main():

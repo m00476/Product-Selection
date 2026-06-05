@@ -10,3 +10,6 @@ output/
 .worktrees/
 # 含本地密码的一次性 provision 脚本，勿提交
 scripts/provision_metabase.py
+
+# 生成的报告输出
+reports/

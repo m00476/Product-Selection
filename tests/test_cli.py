@@ -134,3 +134,70 @@ def test_cli_import_external(monkeypatch):
     )
     cli.main()
     assert calls["path"] == "/x/app.db"
+
+
+def test_cli_erp_image_search_does_not_open_database(monkeypatch, tmp_path):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-search",
+        "--source", "seerfar",
+        "--product-type", "mask",
+        "--limit", "5",
+        "--delay", "0",
+    ])
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: str(tmp_path))
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: (_ for _ in ()).throw(AssertionError("db not needed")))
+    monkeypatch.setattr(
+        cli.erp_image_search,
+        "run_image_search",
+        lambda **kwargs: calls.update(kwargs) or {"searched": 5, "written": 5},
+    )
+
+    cli.main()
+
+    assert calls["source"] == "seerfar"
+    assert calls["product_type"] == "mask"
+    assert calls["base_dir"] == str(tmp_path)
+    assert calls["limit"] == 5
+    assert calls["delay_seconds"] == 0
+
+
+def test_cli_erp_image_decision_report_does_not_open_database(monkeypatch, tmp_path):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-decision-report",
+        "--source", "ixspy",
+        "--product-type", "bag_accessories",
+        "--base-dir", str(tmp_path),
+    ])
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: (_ for _ in ()).throw(AssertionError("db not needed")))
+    monkeypatch.setattr(
+        cli.erp_image_search,
+        "generate_boss_decision_report",
+        lambda **kwargs: calls.update(kwargs) or {"products": 3, "csv": "x.csv", "markdown": "x.md"},
+    )
+
+    cli.main()
+
+    assert calls["source"] == "ixspy"
+    assert calls["product_type"] == "bag_accessories"
+    assert calls["base_dir"] == str(tmp_path)
+
+
+def test_cli_erp_image_decision_report_defaults_to_current_project(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-decision-report",
+        "--source", "ixspy",
+        "--product-type", "bag_accessories",
+    ])
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: (_ for _ in ()).throw(AssertionError("db not needed")))
+    monkeypatch.setattr(
+        cli.erp_image_search,
+        "generate_boss_decision_report",
+        lambda **kwargs: calls.update(kwargs) or {"products": 1, "csv": "x.csv", "markdown": "x.md"},
+    )
+
+    cli.main()
+
+    assert calls["base_dir"] == "."
