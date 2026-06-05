@@ -74,3 +74,35 @@ def test_cli_quality_reports_source_file(monkeypatch, tmp_path, capsys):
 
     assert calls == [(str(csv_path), "ixspy", "audio")]
     assert '"missing_price": 2' in capsys.readouterr().out
+
+
+def test_cli_collect_single_target(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "collect", "--source", "seerfar", "--product-type", "laptop",
+    ])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(
+        cli, "collect_all",
+        lambda conn, targets, *, base_dir: calls.update(targets=targets, base_dir=base_dir) or [],
+    )
+    cli.main()
+    assert calls["targets"] == [("seerfar", "laptop")]
+    assert calls["base_dir"] == "/base518"
+
+
+def test_cli_collect_all_uses_config_targets(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", ["sourcing.cli", "collect", "--all"])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(cli.config, "collect_targets", lambda: [("erp", "socks")])
+    monkeypatch.setattr(
+        cli, "collect_all",
+        lambda conn, targets, *, base_dir: calls.update(targets=targets) or [],
+    )
+    cli.main()
+    assert calls["targets"] == [("erp", "socks")]
