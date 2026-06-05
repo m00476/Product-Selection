@@ -106,3 +106,17 @@ def test_cli_collect_all_uses_config_targets(monkeypatch):
     )
     cli.main()
     assert calls["targets"] == [("erp", "socks")]
+
+
+def test_cli_bridge_matches(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", ["sourcing.cli", "bridge-matches"])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "app_db_path", lambda: "/x/app.db")
+    monkeypatch.setattr(
+        cli, "bridge_matches",
+        lambda conn, path: calls.update(path=path) or {"bridged": 3, "read": 5},
+    )
+    cli.main()
+    assert calls["path"] == "/x/app.db"

@@ -52,6 +52,15 @@ python -m sourcing.cli collect --all
 `程序` = `python`，`参数` = `-m sourcing.cli collect --all`，`起始于` = 项目目录 `D:\ProductSourcingSystem`。
 建议每天凌晨触发；采集依赖 Chrome/Chromedriver 与 518/.env 凭证。
 
+## 匹配桥接（复用 518 的匹配结果）
+518 项目用 DINOv2/FAISS + 文本相似度做商品匹配，结果存在 `518/data/app.db`。
+本命令把其 `match_results` 桥接进本系统 `product_matches`（按 平台商品ID / erp_sku 映射）：
+```powershell
+python -m sourcing.cli bridge-matches
+```
+配置 `.env` 的 `APP_DB_PATH` 指向 518 的 app.db。`status` 取值：
+`confirmed`（已匹配自家 SKU）、`no_erp_match`（竞品在 ERP 无对应 = 选品机会）、`pending` / `rejected`。
+
 ## 测试
 ```powershell
 pytest -v

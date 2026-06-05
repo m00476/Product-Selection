@@ -35,3 +35,7 @@ def collect_targets() -> list[tuple[str, str]]:
         if source and product_type:
             targets.append((source, product_type))
     return targets
+
+
+def app_db_path() -> str:
+    return os.environ.get("APP_DB_PATH", r"C:\Users\aibp\Desktop\518\data\app.db")
