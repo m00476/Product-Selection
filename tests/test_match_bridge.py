@@ -64,7 +64,8 @@ def test_bridge_rows_maps_and_links(conn):
         cur.execute("SELECT competitor_product_id, own_product_id, status, final_score "
                     "FROM product_matches")
         row = cur.fetchone()
-        assert row == (comp, own, "confirmed", 12.3)
+        assert row[:3] == (comp, own, "confirmed")
+        assert float(row[3]) == 12.3  # final_score 是 NUMERIC，按 float 比较
 
 
 def test_bridge_no_erp_match_keeps_null_own(conn):

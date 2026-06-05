@@ -1,20 +1,5 @@
-from decimal import Decimal
-
 import psycopg
-from psycopg.types.numeric import NumericLoader
 from sourcing.bridge.match_reader import MatchRow
-
-
-class _FloatNumericLoader(NumericLoader):
-    """Load PostgreSQL NUMERIC as float so scores round-trip as Python floats."""
-
-    def load(self, data):
-        value = super().load(data)
-        return float(value) if isinstance(value, Decimal) else value
-
-
-# NUMERIC oid = 1700; register globally so final_score etc. come back as float.
-psycopg.adapters.register_loader("numeric", _FloatNumericLoader)
 
 
 def normalize_status(raw: str | None) -> str:
