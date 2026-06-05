@@ -53,3 +53,22 @@ ORDER BY final_score DESC;
 
 ## 5. 刷新
 看板读视图，数据随 collect / import-external / bridge-matches / analyze 更新而更新。
+
+## 看板三：ERP 图搜查重决策
+先把图搜结果落库：
+```powershell
+python -m sourcing.cli erp-image-search --source ixspy --product-type <品类> --limit 50
+python -m sourcing.cli erp-image-load-db --source ixspy --product-type <品类>
+```
+给 metabase_ro 授权（执行一次）：
+```sql
+GRANT SELECT ON v_erp_image_decisions, erp_image_decisions TO metabase_ro;
+```
+Metabase 卡片 SQL：
+```sql
+SELECT external_sku, external_product_name, final_decision, boss_action,
+       candidate_count, normal_candidate_count, top_erp_skus
+FROM v_erp_image_decisions
+ORDER BY is_new_opportunity DESC, candidate_count DESC;
+```
+按 `final_decision` 筛“疑似新品机会”即得过了 ERP 查重的真实新品候选。
