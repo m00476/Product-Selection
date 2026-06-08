@@ -14,6 +14,7 @@ class FakeRunner:
 
     def run(self, args, *, cwd, env):
         self.calls += 1
+        self.last_env = env
         if self.fail:
             return RunResult(1, "", "boom")
         os.makedirs(os.path.dirname(self.csv_path), exist_ok=True)
@@ -59,3 +60,12 @@ def test_collect_target_missing_csv_fails(conn, tmp_path):
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM collector_errors")
         assert cur.fetchone()[0] == 1
+
+
+def test_collect_target_sets_output_root_env_to_base_dir(conn, tmp_path):
+    base = str(tmp_path)
+    runner = FakeRunner(base, "seerfar", "laptop")
+    collect_target(conn, "seerfar", "laptop", base_dir=base, runner=runner)
+    # 爬虫拿到的 COLLECT_OUTPUT_ROOT 必须 = base_dir，确保写到 orchestrator 找文件的同一处
+    assert runner.last_env["COLLECT_OUTPUT_ROOT"] == base
+    assert runner.last_env["PRODUCT_TYPE"] == "laptop"

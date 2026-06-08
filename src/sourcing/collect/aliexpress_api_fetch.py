@@ -12,7 +12,7 @@ from urllib.error import HTTPError, URLError
 from sourcing.collect.api_common import find_record_lists, read_json, request_json, write_csv, write_json
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "furniture").strip() or "furniture"
 ALIEXPRESS_CATEGORY_NAME = os.environ.get("ALIEXPRESS_CATEGORY_NAME", os.environ.get("IXSPY_CATEGORY_NAME", ""))
 TARGET_COUNT = int(os.environ.get("ALIEXPRESS_API_TARGET_COUNT") or 0)

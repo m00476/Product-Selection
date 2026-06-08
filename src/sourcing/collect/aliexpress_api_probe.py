@@ -10,7 +10,7 @@ from sourcing.collect.api_common import find_record_lists, product_score, reques
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "furniture").strip() or "furniture"
 IXSPY_LOGIN_URL = os.environ.get("IXSPY_LOGIN_URL", "https://user.ixspy.com/login")
 IXSPY_DATA_URL = os.environ.get("IXSPY_DATA_URL", "https://ixspy.com/data")
