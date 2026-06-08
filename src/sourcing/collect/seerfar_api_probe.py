@@ -12,7 +12,7 @@ from sourcing.collect.api_common import find_record_lists, product_score, read_j
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "xiongzhen").strip() or "xiongzhen"
 SEERFAR_URL = os.environ.get("SEERFAR_URL", "https://seerfar.cn/admin/index.html")
 PRODUCT_SEARCH_URL = os.environ.get("SEERFAR_PRODUCT_SEARCH_URL", "https://seerfar.cn/admin/product-search.html")

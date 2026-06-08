@@ -11,7 +11,7 @@ from sourcing.collect.erp_api_fetch import ProjectPaths
 
 load_dotenv()
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "xiongzhen").strip() or "xiongzhen"
 ERP_URL = os.environ.get("ERP_URL", "http://103.198.125.2:8077/")
 ERP_USERNAME = os.environ.get("ERP_USERNAME", "")

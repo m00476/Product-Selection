@@ -17,9 +17,11 @@ IMPORTERS = {
 }
 
 
-def _build_env(source: str, product_type: str) -> dict:
+def _build_env(source: str, product_type: str, base_dir: str) -> dict:
     env = dict(os.environ)
     env["PRODUCT_TYPE"] = product_type
+    # 让内置爬虫把产物写到 base_dir(=orchestrator 找文件的同一处)，避免"采集成功却报CSV未找到"。
+    env["COLLECT_OUTPUT_ROOT"] = base_dir
     if source == "seerfar":
         env["MARKET_SOURCE"] = "seerfar"
     return env
@@ -30,7 +32,7 @@ def collect_target(conn: psycopg.Connection, source: str, product_type: str, *,
     runner = runner or SubprocessScriptRunner()
     python_exe = python_exe or sys.executable
     spec = get_source_spec(source)
-    env = _build_env(source, product_type)
+    env = _build_env(source, product_type, base_dir)
     run_id = start_collector_run(conn, source, product_type)
 
     commands = []

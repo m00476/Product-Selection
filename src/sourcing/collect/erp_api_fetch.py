@@ -19,7 +19,7 @@ from sourcing.collect.api_common import (
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "xiongzhen").strip() or "xiongzhen"
 TARGET_COUNT = int(os.environ.get("ERP_API_TARGET_COUNT") or 0)
 MAX_RETRIES = int(os.environ.get("ERP_API_MAX_RETRIES") or 3)

@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from sourcing.collect.api_common import find_record_lists, read_json, request_json, write_csv, write_json
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(os.environ.get("COLLECT_OUTPUT_ROOT") or Path(__file__).resolve().parents[3])
 PRODUCT_TYPE = os.environ.get("PRODUCT_TYPE", "xiongzhen").strip() or "xiongzhen"
 TARGET_COUNT = int(os.environ.get("SEERFAR_API_TARGET_COUNT") or 0)
 PAGE_SIZE = int(os.environ.get("SEERFAR_API_PAGE_SIZE") or 100)
