@@ -48,10 +48,13 @@ def rerank_rows(rows, get_embedding, *, threshold: float = DEFAULT_THRESHOLD):
     return out
 
 
-def build_embedder(base_dir: str, product_type: str):
-    """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。"""
-    if base_dir not in sys.path:
-        sys.path.insert(0, base_dir)
+def build_embedder(repo_dir: str | None = None, product_type: str | None = None):
+    """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。
+    repo_dir = 518 嵌入代码所在目录（与数据 base_dir 解耦），默认 config.embedding_repo_dir()。"""
+    from sourcing import config
+    repo_dir = repo_dir or config.embedding_repo_dir()
+    if repo_dir not in sys.path:
+        sys.path.insert(0, repo_dir)
     try:
         import pillow_avif  # noqa: F401  注册 AVIF 解码：AliExpress 图多为 AVIF，PIL 默认读不了
     except ImportError:
@@ -70,7 +73,7 @@ def rerank_image_search(*, source: str, product_type: str, base_dir: str,
         rows = rows[:limit]
     matcher = None
     if embedder is None:
-        embedder, matcher = build_embedder(base_dir, product_type)
+        embedder, matcher = build_embedder(product_type=product_type)
     out = rerank_rows(rows, embedder, threshold=threshold)
     fields = list(RESULT_FIELDS) + EXTRA_FIELDS
     write_csv(str(path), out, fields)
