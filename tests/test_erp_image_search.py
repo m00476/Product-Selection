@@ -267,9 +267,12 @@ def test_generate_boss_decision_report_writes_csv_and_markdown(tmp_path):
     assert summary["products"] == 1
     with open(summary["csv"], "r", encoding="utf-8-sig", newline="") as file:
         csv_rows = list(csv.DictReader(file))
-    assert csv_rows[0]["final_decision"] == "疑似已有正常同款"
-    assert csv_rows[0]["external_price"] == "12.5"
-    assert csv_rows[0]["external_sales"] == "300"
+    assert "系统判断" in csv_rows[0]
+    assert "final_decision" not in csv_rows[0]
+    assert csv_rows[0]["系统判断"] == "疑似已有正常同款"
+    assert csv_rows[0]["外部平台价格"] == "12.5"
+    assert csv_rows[0]["外部平台累计销量"] == "300"
+    assert csv_rows[0]["ERP正常同款数量"] == "1"
     markdown = Path(summary["markdown"]).read_text(encoding="utf-8")
     assert "ERP 以图搜索老板决策报告" in markdown
     assert "Handle wrap" in markdown

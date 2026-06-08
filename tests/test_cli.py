@@ -218,3 +218,19 @@ def test_cli_erp_image_load_db(monkeypatch):
     )
     cli.main()
     assert calls == {"source": "ixspy", "product_type": "bags", "base_dir": "/base518"}
+
+
+def test_cli_erp_image_rerank(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-rerank", "--source", "ixspy", "--product-type", "bags", "--limit", "30",
+    ])
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(
+        cli, "rerank_image_search",
+        lambda *, source, product_type, base_dir, limit, threshold:
+            calls.update(source=source, product_type=product_type, base_dir=base_dir,
+                         limit=limit, threshold=threshold) or {"reranked": 30, "confident": 12},
+    )
+    cli.main()
+    assert calls["source"] == "ixspy" and calls["limit"] == 30 and calls["base_dir"] == "/base518"

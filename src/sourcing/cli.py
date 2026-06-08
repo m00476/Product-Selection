@@ -8,6 +8,7 @@ from sourcing.collect.orchestrator import collect_all
 from sourcing.bridge.run import bridge_matches
 from sourcing.bridge.external_importer import import_external_products
 from sourcing.bridge.image_decisions import load_image_decisions
+from sourcing.rerank.embed import rerank_image_search
 
 
 def main() -> None:
@@ -51,6 +52,12 @@ def main() -> None:
     img_load.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
     img_load.add_argument("--product-type", required=True)
 
+    rr = sub.add_parser("erp-image-rerank", help="用DINOv2嵌入给图搜候选补相似度并卡阈值")
+    rr.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    rr.add_argument("--product-type", required=True)
+    rr.add_argument("--limit", type=int, default=None)
+    rr.add_argument("--threshold", type=float, default=0.85)
+
     args = parser.parse_args()
 
     if args.command == "quality":
@@ -76,6 +83,13 @@ def main() -> None:
             base_dir=args.base_dir,
         )
         print(f"[DONE] ERP image decision report: {summary}")
+        return
+
+    if args.command == "erp-image-rerank":
+        summary = rerank_image_search(
+            source=args.source, product_type=args.product_type,
+            base_dir=config.collect_base_dir(), limit=args.limit, threshold=args.threshold)
+        print(f"[DONE] reranked: {summary}")
         return
 
     conn = db.connect(config.database_url())
