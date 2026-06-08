@@ -71,3 +71,14 @@ def test_rerank_image_search_writes_similarity(tmp_path):
     out_rows = list(csv.DictReader(open(output_csv_path(base, "ixspy", "bags"), encoding="utf-8-sig")))
     assert out_rows[0]["embedding_similarity"] == "1.0"
     assert out_rows[0]["embedding_confident"] == "1"
+
+
+def test_rerank_maps_ixspy_source_to_aliexpress():
+    seen = {}
+    def get_embedding(url, source):
+        seen[url] = source
+        return np.array([1.0, 0.0])
+    rows = [{"source": "ixspy", "external_image_url": "comp_url", "erp_image_url": "erp_url"}]
+    rerank_rows(rows, get_embedding)
+    assert seen["comp_url"] == "aliexpress"   # ixspy -> aliexpress
+    assert seen["erp_url"] == "erp"           # 候选恒为 erp

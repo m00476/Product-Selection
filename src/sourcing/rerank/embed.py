@@ -7,6 +7,15 @@ from sourcing.collect.api_common import write_csv
 DEFAULT_THRESHOLD = 0.85
 EXTRA_FIELDS = ["embedding_similarity", "embedding_confident"]
 
+# 我们的源名 -> 518 图片下载器认的"市场"名（决定取图用的头/防盗链处理）。
+# 例：本系统 source=ixspy，实际市场是 aliexpress，下载器只认 aliexpress。
+_EMBED_SOURCE = {"ixspy": "aliexpress"}
+
+
+def embed_source(row_source) -> str:
+    s = (row_source or "").strip()
+    return _EMBED_SOURCE.get(s, s or "market")
+
 
 def _cosine(a, b):
     if a is None or b is None:
@@ -29,7 +38,7 @@ def rerank_rows(rows, get_embedding, *, threshold: float = DEFAULT_THRESHOLD):
 
     out = []
     for row in rows:
-        vq = emb(row.get("external_image_url"), row.get("source") or "market")
+        vq = emb(row.get("external_image_url"), embed_source(row.get("source")))
         vc = emb(row.get("erp_image_url"), "erp")
         sim = _cosine(vq, vc)
         new = dict(row)
@@ -43,6 +52,10 @@ def build_embedder(base_dir: str, product_type: str):
     """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。"""
     if base_dir not in sys.path:
         sys.path.insert(0, base_dir)
+    try:
+        import pillow_avif  # noqa: F401  注册 AVIF 解码：AliExpress 图多为 AVIF，PIL 默认读不了
+    except ImportError:
+        pass
     from image_embedding_matcher import ImageEmbeddingMatcher
     matcher = ImageEmbeddingMatcher(product_type=product_type)
     return matcher.get_embedding, matcher
