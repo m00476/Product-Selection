@@ -270,6 +270,21 @@ def normalize_search_response(payload: dict) -> SearchResult:
     )
 
 
+def _default_token_refresher(base_dir: str):
+    from sourcing.erp_token import refresh_erp_token  # 懒导入避免循环
+    return refresh_erp_token(base_dir)
+
+
+def _is_auth_failure(result) -> bool:
+    """判断图搜结果是否像 token 过期/鉴权失败(而非正常的'没匹配到')。"""
+    if getattr(result, "status", None) != "error":
+        return False
+    message = (getattr(result, "message", "") or "").lower()
+    code = getattr(result, "code", None)
+    return code in (401, 403, 404) or any(
+        kw in message for kw in ("not found", "token", "unauth", "登录", "鉴权"))
+
+
 def run_image_search(
     *,
     source: str,
@@ -280,24 +295,37 @@ def run_image_search(
     search_func=None,
     sleep_func=time.sleep,
     max_retries: int = 3,
+    token_refresher=None,
 ) -> dict:
     input_path = input_csv_path(base_dir, source, product_type)
     rows = load_external_rows(input_path, source=source, product_type=product_type)
     if limit is not None:
         rows = rows[:limit]
 
+    client = None
     if search_func is None:
         client = ErpImageSearchClient()
         search_func = client.search
 
+    refreshed = False
     output_rows = []
     for index, external in enumerate(rows):
         result = _search_with_retries(
-            search_func,
-            external["external_image_url"],
-            max_retries=max_retries,
-            sleep_func=sleep_func,
+            search_func, external["external_image_url"],
+            max_retries=max_retries, sleep_func=sleep_func,
         )
+        # token 过期自动刷新一次后重试(只刷新一次, 避免反复登录)
+        can_refresh = client is not None or token_refresher is not None
+        if can_refresh and not refreshed and _is_auth_failure(result):
+            refreshed = True
+            refresher = token_refresher or _default_token_refresher
+            new_token = refresher(str(base_dir))
+            if client is not None and new_token:
+                client.token = new_token
+            result = _search_with_retries(
+                search_func, external["external_image_url"],
+                max_retries=max_retries, sleep_func=sleep_func,
+            )
         output_rows.extend(_result_rows(external, result))
         if delay_seconds > 0 and index < len(rows) - 1:
             sleep_func(delay_seconds)
