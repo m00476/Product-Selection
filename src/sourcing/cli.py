@@ -65,6 +65,11 @@ def main() -> None:
     pipe.add_argument("--limit", type=int, default=None)
     pipe.add_argument("--threshold", type=float, default=0.85)
 
+    mr = sub.add_parser("erp-image-match-report", help="出 每竞品↔ERP最佳匹配 精准清单(嵌入排序)")
+    mr.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    mr.add_argument("--product-type", required=True)
+    mr.add_argument("--base-dir", default=None)
+
     args = parser.parse_args()
 
     if args.command == "quality":
@@ -90,6 +95,13 @@ def main() -> None:
             base_dir=args.base_dir,
         )
         print(f"[DONE] ERP image decision report: {summary}")
+        return
+
+    if args.command == "erp-image-match-report":
+        summary = erp_image_search.generate_best_match_report(
+            source=args.source, product_type=args.product_type,
+            base_dir=args.base_dir or config.collect_base_dir())
+        print(f"[DONE] best match report: {summary}")
         return
 
     if args.command == "erp-image-rerank":

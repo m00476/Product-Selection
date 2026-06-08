@@ -254,3 +254,18 @@ def test_cli_erp_image_pipeline(monkeypatch):
     cli.main()
     assert calls == {"source": "ixspy", "product_type": "home_goods",
                      "base_dir": "/base518", "limit": 50, "threshold": 0.8}
+
+
+def test_cli_erp_image_match_report(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-match-report", "--source", "ixspy", "--product-type", "home_goods",
+    ])
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(
+        cli.erp_image_search, "generate_best_match_report",
+        lambda *, source, product_type, base_dir:
+            calls.update(source=source, product_type=product_type, base_dir=base_dir) or {"products": 1000},
+    )
+    cli.main()
+    assert calls == {"source": "ixspy", "product_type": "home_goods", "base_dir": "/base518"}
