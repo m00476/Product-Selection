@@ -121,6 +121,12 @@ docker compose up -d metabase   # http://localhost:3000
 python -m sourcing.cli erp-image-pipeline --source ixspy --product-type <品类> --limit 50 --threshold 0.85
 ```
 等价于依次跑 erp-image-search -> erp-image-rerank -> erp-image-load-db -> erp-image-decision-report。
+pipeline 还会自动生成 `best_match_report.csv`（每个竞品↔最像ERP商品的精准匹配清单，按嵌入相似度排序，带匹配判定）。
+单独再出这份清单：
+```powershell
+python -m sourcing.cli erp-image-match-report --source ixspy --product-type <品类>
+```
+
 
 ### 图搜候选嵌入复核（提精度）
 在图搜与落库之间插一步，用 DINOv2 给候选补真实相似度并卡阈值：

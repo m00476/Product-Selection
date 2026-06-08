@@ -1,7 +1,9 @@
 """一键编排：外部平台数据 -> 两层匹配(ERP图搜粗筛 + DINOv2嵌入精配) -> 落库 + 报告。"""
 import psycopg
 
-from sourcing.erp_image_search import run_image_search, generate_boss_decision_report
+from sourcing.erp_image_search import (
+    run_image_search, generate_boss_decision_report, generate_best_match_report,
+)
 from sourcing.rerank.embed import rerank_image_search
 from sourcing.bridge.image_decisions import load_image_decisions
 
@@ -17,4 +19,6 @@ def run_pipeline(conn: psycopg.Connection, *, source: str, product_type: str,
                                  base_dir=base_dir, threshold=threshold)
     load = load_image_decisions(conn, source=source, product_type=product_type, base_dir=base_dir)
     report = generate_boss_decision_report(source=source, product_type=product_type, base_dir=base_dir)
-    return {"search": search, "rerank": rerank, "load": load, "report": report}
+    best_match = generate_best_match_report(source=source, product_type=product_type, base_dir=base_dir)
+    return {"search": search, "rerank": rerank, "load": load,
+            "report": report, "best_match": best_match}

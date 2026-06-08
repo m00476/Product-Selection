@@ -637,3 +637,77 @@ def _build_multipart_body(fields: dict[str, str], files: dict[str, tuple[str, by
         )
     chunks.append(f"--{boundary}--\r\n".encode())
     return b"".join(chunks), boundary
+
+
+BEST_MATCH_FIELDS = [
+    "竞品SKU", "竞品名称", "竞品图", "竞品链接", "最像ERP_SKU", "ERP主SKU",
+    "ERP商品状态", "ERP候选图", "嵌入相似度", "匹配判定",
+]
+
+
+def _embedding_value(row: dict) -> float:
+    try:
+        return float(row.get("embedding_similarity"))
+    except (TypeError, ValueError):
+        return -1.0
+
+
+def best_match_verdict(sim: float) -> str:
+    if sim < 0:
+        return "无图(竞品图失败)"
+    if sim >= 0.85:
+        return "高置信匹配"
+    if sim >= 0.70:
+        return "可能匹配"
+    if sim >= 0.50:
+        return "弱匹配(需人工)"
+    return "无匹配(疑似不同款)"
+
+
+def build_best_match_rows(rows: list[dict]) -> list[dict]:
+    """每个竞品取嵌入相似度最高的候选(B口径: 无匹配也保留最像候选), 输出一商品一行。"""
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for row in rows:
+        key = row.get("external_sku") or ""
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+    out = []
+    for key in order:
+        items = groups[key]
+        candidates = [it for it in items if it.get("erp_image_url")] or items
+        best = max(candidates, key=_embedding_value)
+        sim = _embedding_value(best)
+        out.append({
+            "竞品SKU": key,
+            "竞品名称": (best.get("external_product_name") or "")[:60],
+            "竞品图": best.get("external_image_url", ""),
+            "竞品链接": best.get("external_product_url", ""),
+            "最像ERP_SKU": best.get("matched_erp_sku", ""),
+            "ERP主SKU": best.get("matched_main_sku", ""),
+            "ERP商品状态": best.get("erp_product_status_text", ""),
+            "ERP候选图": best.get("erp_image_url", ""),
+            "嵌入相似度": round(sim, 4) if sim >= 0 else "",
+            "匹配判定": best_match_verdict(sim),
+        })
+    return out
+
+
+def best_match_csv_path(base_dir, source: str, product_type: str) -> Path:
+    return Path(base_dir) / "output" / "image_search" / source / product_type / "best_match_report.csv"
+
+
+def generate_best_match_report(*, source: str, product_type: str, base_dir="." ) -> dict:
+    rows = _read_csv_dicts(output_csv_path(base_dir, source, product_type))
+    out = build_best_match_rows(rows)
+    out.sort(key=lambda r: r["嵌入相似度"] if isinstance(r["嵌入相似度"], float) else -1.0,
+             reverse=True)
+    csv_path = write_csv(str(best_match_csv_path(base_dir, source, product_type)),
+                         out, BEST_MATCH_FIELDS)
+    verdicts: dict[str, int] = {}
+    for r in out:
+        verdicts[r["匹配判定"]] = verdicts.get(r["匹配判定"], 0) + 1
+    return {"source": source, "product_type": product_type, "products": len(out),
+            "verdicts": verdicts, "csv": csv_path}
