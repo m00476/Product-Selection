@@ -114,6 +114,14 @@ docker compose up -d metabase   # http://localhost:3000
 ```
 新增视图 `v_erp_image_decisions`（ERP 图搜查重决策）。流程：`erp-image-search` → `erp-image-load-db` → Metabase。
 
+### 一键两层匹配（推荐）
+准备好外部平台数据 `input/<市场>/<品类>/*.csv`（含 image_url）后，一条命令走完
+"ERP图搜粗筛 + DINOv2嵌入精配 + 落库 + 报告"：
+```powershell
+python -m sourcing.cli erp-image-pipeline --source ixspy --product-type <品类> --limit 50 --threshold 0.85
+```
+等价于依次跑 erp-image-search -> erp-image-rerank -> erp-image-load-db -> erp-image-decision-report。
+
 ### 图搜候选嵌入复核（提精度）
 在图搜与落库之间插一步，用 DINOv2 给候选补真实相似度并卡阈值：
 ```powershell
