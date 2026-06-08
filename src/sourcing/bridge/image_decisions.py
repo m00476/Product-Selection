@@ -12,6 +12,13 @@ def _to_int(value):
         return None
 
 
+def _to_float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def upsert_image_decision(conn: psycopg.Connection, d: dict) -> None:
     with conn.cursor() as cur:
         cur.execute(
@@ -20,8 +27,9 @@ def upsert_image_decision(conn: psycopg.Connection, d: dict) -> None:
                 (source, product_type, external_sku, external_product_name,
                  external_product_url, external_image_url, final_decision, boss_action,
                  candidate_count, normal_candidate_count, stopped_candidate_count,
-                 limited_candidate_count, risk_candidate_count, top_erp_skus, top_main_skus)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                 limited_candidate_count, risk_candidate_count, top_erp_skus, top_main_skus,
+                 max_embedding_similarity)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (source, product_type, external_sku) DO UPDATE SET
                 external_product_name=EXCLUDED.external_product_name,
                 external_product_url=EXCLUDED.external_product_url,
@@ -33,6 +41,7 @@ def upsert_image_decision(conn: psycopg.Connection, d: dict) -> None:
                 limited_candidate_count=EXCLUDED.limited_candidate_count,
                 risk_candidate_count=EXCLUDED.risk_candidate_count,
                 top_erp_skus=EXCLUDED.top_erp_skus, top_main_skus=EXCLUDED.top_main_skus,
+                max_embedding_similarity=EXCLUDED.max_embedding_similarity,
                 generated_at=now()
             """,
             (
@@ -42,6 +51,7 @@ def upsert_image_decision(conn: psycopg.Connection, d: dict) -> None:
                 _to_int(d.get("candidate_count")), _to_int(d.get("normal_candidate_count")),
                 _to_int(d.get("stopped_candidate_count")), _to_int(d.get("limited_candidate_count")),
                 _to_int(d.get("risk_candidate_count")), d.get("top_erp_skus"), d.get("top_main_skus"),
+                _to_float(d.get("max_embedding_similarity")),
             ),
         )
     conn.commit()

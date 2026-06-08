@@ -74,6 +74,7 @@ BOSS_DECISION_FIELDS = [
     "risk_candidate_count",
     "top_erp_skus",
     "top_main_skus",
+    "max_embedding_similarity",
 ]
 
 BOSS_DECISION_FIELD_LABELS = {
@@ -413,6 +414,7 @@ def build_boss_decision_rows(rows: list[dict]) -> list[dict]:
                 "risk_candidate_count": risk,
                 "top_erp_skus": _join_unique(items, "matched_erp_sku"),
                 "top_main_skus": _join_unique(items, "matched_main_sku"),
+                "max_embedding_similarity": _max_embedding(items),
             }
         )
     return decisions
@@ -519,6 +521,19 @@ def _read_csv_dicts(path: str | Path) -> list[dict]:
 
 def _count_priority(rows: list[dict], priority: str) -> int:
     return sum(1 for row in rows if (row.get("candidate_priority") or "").strip() == priority)
+
+
+def _max_embedding(rows: list[dict]):
+    vals = []
+    for row in rows:
+        v = row.get("embedding_similarity")
+        if v in (None, "", "None"):
+            continue
+        try:
+            vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return max(vals) if vals else ""
 
 
 def _boss_decision(

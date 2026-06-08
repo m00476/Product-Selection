@@ -70,3 +70,29 @@ def test_load_image_decisions(conn, tmp_path):
     with conn.cursor() as cur:
         cur.execute("SELECT count(*) FROM erp_image_decisions")
         assert cur.fetchone()[0] == 2
+
+
+def test_decisions_carry_max_embedding_similarity(conn, tmp_path):
+    import csv
+    from pathlib import Path
+    from sourcing.bridge.image_decisions import load_image_decisions
+    from sourcing.erp_image_search import output_csv_path, RESULT_FIELDS
+    base = str(tmp_path)
+    p = output_csv_path(base, "ixspy", "bags")
+    Path(p).parent.mkdir(parents=True, exist_ok=True)
+    fields = list(RESULT_FIELDS) + ["embedding_similarity", "embedding_confident"]
+    rows = [
+        {"source": "ixspy", "product_type": "bags", "external_sku": "E1",
+         "matched_erp_sku": "ERP1", "match_status": "success", "erp_product_status": "8",
+         "candidate_priority": "可用正常商品", "embedding_similarity": "0.62", "embedding_confident": "0"},
+        {"source": "ixspy", "product_type": "bags", "external_sku": "E1",
+         "matched_erp_sku": "ERP2", "match_status": "success", "erp_product_status": "8",
+         "candidate_priority": "可用正常商品", "embedding_similarity": "0.91", "embedding_confident": "1"},
+    ]
+    with open(p, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields); w.writeheader()
+        for r in rows: w.writerow({k: r.get(k, "") for k in fields})
+    load_image_decisions(conn, source="ixspy", product_type="bags", base_dir=base)
+    with conn.cursor() as cur:
+        cur.execute("SELECT max_embedding_similarity FROM v_erp_image_decisions WHERE external_sku='E1'")
+        assert float(cur.fetchone()[0]) == 0.91
