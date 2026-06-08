@@ -70,7 +70,21 @@ def main() -> None:
     mr.add_argument("--product-type", required=True)
     mr.add_argument("--base-dir", default=None)
 
+    sub.add_parser("migrate-embedding-cache",
+                   help="一次性把嵌入缓存 pkl 迁到 SQLite(之后精筛内存恒定,需内存充裕时跑)")
+
     args = parser.parse_args()
+
+    if args.command == "migrate-embedding-cache":
+        from sourcing.rerank.embed import _import_iem, sqlite_cache_path
+        from sourcing.rerank.embed_cache import migrate_pickle_to_sqlite
+        _import_iem()
+        import image_embedding_matcher as iem
+        pkl = iem.EMBEDDING_CACHE_FILE
+        sqlite_path = sqlite_cache_path()
+        n = migrate_pickle_to_sqlite(pkl, sqlite_path)
+        print(f"[DONE] migrated {n} embeddings -> {sqlite_path}")
+        return
 
     if args.command == "quality":
         report = inspect_csv_quality(args.path, source=args.source, product_type=args.product_type)

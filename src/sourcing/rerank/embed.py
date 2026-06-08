@@ -48,9 +48,13 @@ def rerank_rows(rows, get_embedding, *, threshold: float = DEFAULT_THRESHOLD):
     return out
 
 
-def build_embedder(repo_dir: str | None = None, product_type: str | None = None):
-    """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。
-    repo_dir = 518 嵌入代码所在目录（与数据 base_dir 解耦），默认 config.embedding_repo_dir()。"""
+def sqlite_cache_path(repo_dir: str | None = None) -> str:
+    """嵌入 SQLite 缓存路径(与 518 pkl 同目录)。"""
+    import image_embedding_matcher as iem
+    return os.path.join(os.path.dirname(iem.EMBEDDING_CACHE_FILE), "image_embeddings.sqlite")
+
+
+def _import_iem(repo_dir: str | None = None):
     from sourcing import config
     repo_dir = repo_dir or config.embedding_repo_dir()
     if repo_dir not in sys.path:
@@ -59,8 +63,43 @@ def build_embedder(repo_dir: str | None = None, product_type: str | None = None)
         import pillow_avif  # noqa: F401  注册 AVIF 解码：AliExpress 图多为 AVIF，PIL 默认读不了
     except ImportError:
         pass
+    return repo_dir
+
+
+def build_embedder(repo_dir: str | None = None, product_type: str | None = None,
+                   use_sqlite_cache: bool | None = None):
+    """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。
+    repo_dir = 518 嵌入代码所在目录（与数据 base_dir 解耦），默认 config.embedding_repo_dir()。
+
+    use_sqlite_cache: True/None 且 SQLite 已迁移时，用按 key 懒查的 SQLite 缓存替换 matcher.cache，
+    避免把 15万条 pkl 一次性载入内存(OOM)。未迁移则回退原 pkl 行为(零变化)。
+    """
+    _import_iem(repo_dir)
+    import image_embedding_matcher as iem
     from image_embedding_matcher import ImageEmbeddingMatcher
-    matcher = ImageEmbeddingMatcher(product_type=product_type)
+
+    sqlite_path = sqlite_cache_path(repo_dir)
+    want_sqlite = use_sqlite_cache if use_sqlite_cache is not None else os.path.exists(sqlite_path)
+    if not want_sqlite:
+        matcher = ImageEmbeddingMatcher(product_type=product_type)
+        return matcher.get_embedding, matcher
+
+    # 关键：构造前临时把 pkl 路径指向不存在的文件，阻止 _load_cache 把整个 pkl 读进内存。
+    from sourcing.rerank.embed_cache import SqliteEmbeddingCache
+    orig_pkl = iem.EMBEDDING_CACHE_FILE
+    iem.EMBEDDING_CACHE_FILE = sqlite_path + ".__skip__"
+    try:
+        matcher = ImageEmbeddingMatcher(product_type=product_type)
+    finally:
+        iem.EMBEDDING_CACHE_FILE = orig_pkl
+
+    cache = SqliteEmbeddingCache(sqlite_path)
+    matcher.cache = cache
+    _orig_downloader_save = matcher.downloader.save
+    def _save():  # 只刷 SQLite + 图片路径缓存，不再 pickle 整个 cache
+        cache.flush()
+        _orig_downloader_save()
+    matcher.save = _save
     return matcher.get_embedding, matcher
 
 
