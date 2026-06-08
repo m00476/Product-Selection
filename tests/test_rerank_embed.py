@@ -41,3 +41,33 @@ def test_rerank_rows_caches_embeddings_per_url():
     rerank_rows(rows, counting)
     assert sorted(set(calls)) == ["c", "q"]
     assert len(calls) == 2
+
+
+import csv
+from pathlib import Path
+from sourcing.rerank.embed import rerank_image_search
+from sourcing.erp_image_search import output_csv_path, RESULT_FIELDS
+
+
+def _write_results(base, source, product_type, rows):
+    p = output_csv_path(base, source, product_type)
+    Path(p).parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=RESULT_FIELDS)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in RESULT_FIELDS})
+    return p
+
+
+def test_rerank_image_search_writes_similarity(tmp_path):
+    base = str(tmp_path)
+    _write_results(base, "ixspy", "bags", [
+        {"source": "ixspy", "external_sku": "E1", "external_image_url": "q", "erp_image_url": "c"},
+    ])
+    fake = lambda url, source: np.array([1.0, 0.0]) if url in ("q", "c") else None
+    summary = rerank_image_search(source="ixspy", product_type="bags", base_dir=base, embedder=fake)
+    assert summary["reranked"] == 1 and summary["confident"] == 1
+    out_rows = list(csv.DictReader(open(output_csv_path(base, "ixspy", "bags"), encoding="utf-8-sig")))
+    assert out_rows[0]["embedding_similarity"] == "1.0"
+    assert out_rows[0]["embedding_confident"] == "1"
