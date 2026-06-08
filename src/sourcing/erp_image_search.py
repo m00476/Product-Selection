@@ -76,6 +76,35 @@ BOSS_DECISION_FIELDS = [
     "top_main_skus",
 ]
 
+BOSS_DECISION_FIELD_LABELS = {
+    "source": "数据来源",
+    "product_type": "商品类型",
+    "external_sku": "外部平台SKU",
+    "external_product_name": "外部平台商品标题",
+    "external_product_url": "外部平台商品链接",
+    "external_image_url": "外部平台主图链接",
+    "external_source_rank": "外部平台排序",
+    "external_brand": "外部平台品牌",
+    "external_category": "外部平台类目",
+    "external_price": "外部平台价格",
+    "external_sales": "外部平台累计销量",
+    "external_sales_7d": "近7天销量",
+    "external_review_count": "外部平台评论数",
+    "external_rating": "外部平台评分",
+    "external_seller_id": "外部平台卖家ID",
+    "external_seller_name": "外部平台卖家名称",
+    "external_seller_positive_rate": "外部平台卖家好评率",
+    "final_decision": "系统判断",
+    "boss_action": "建议动作",
+    "candidate_count": "ERP候选数量",
+    "normal_candidate_count": "ERP正常同款数量",
+    "stopped_candidate_count": "ERP停产同款数量",
+    "limited_candidate_count": "ERP采购受限同款数量",
+    "risk_candidate_count": "ERP风险同款数量",
+    "top_erp_skus": "最相似ERP SKU",
+    "top_main_skus": "对应ERP主SKU",
+}
+
 PRODUCT_STATUS_MAP = {
     "1": "停产商品",
     "2": "清仓商品",
@@ -312,7 +341,12 @@ def generate_boss_decision_report(
     input_path = output_csv_path(base_dir, source, product_type)
     rows = _read_csv_dicts(input_path)
     decisions = build_boss_decision_rows(rows)
-    csv_path = write_csv(str(boss_decision_csv_path(base_dir, source, product_type)), decisions, _fields_with_extras(BOSS_DECISION_FIELDS, decisions))
+    fields = _fields_with_extras(BOSS_DECISION_FIELDS, decisions)
+    csv_path = write_csv(
+        str(boss_decision_csv_path(base_dir, source, product_type)),
+        _localized_rows(decisions, BOSS_DECISION_FIELD_LABELS),
+        [_field_label(field, BOSS_DECISION_FIELD_LABELS) for field in fields],
+    )
     markdown_path = boss_decision_markdown_path(base_dir, source, product_type)
     markdown_path.parent.mkdir(parents=True, exist_ok=True)
     markdown_path.write_text(render_boss_decision_markdown(decisions, source, product_type), encoding="utf-8")
@@ -534,6 +568,17 @@ def _fields_with_extras(base_fields: list[str], rows: list[dict]) -> list[str]:
                 seen.add(key)
                 fields.append(key)
     return fields
+
+
+def _field_label(field: str, labels: dict[str, str]) -> str:
+    return labels.get(field, field)
+
+
+def _localized_rows(rows: list[dict], labels: dict[str, str]) -> list[dict]:
+    return [
+        {_field_label(key, labels): value for key, value in row.items()}
+        for row in rows
+    ]
 
 
 def _first(product: dict, keys: list[str]) -> str:
