@@ -114,6 +114,15 @@ docker compose up -d metabase   # http://localhost:3000
 ```
 新增视图 `v_erp_image_decisions`（ERP 图搜查重决策）。流程：`erp-image-search` → `erp-image-load-db` → Metabase。
 
+### 图搜候选嵌入复核（提精度）
+在图搜与落库之间插一步，用 DINOv2 给候选补真实相似度并卡阈值：
+```powershell
+python -m sourcing.cli erp-image-search --source ixspy --product-type <品类> --limit 50
+python -m sourcing.cli erp-image-rerank   --source ixspy --product-type <品类> --threshold 0.85
+python -m sourcing.cli erp-image-load-db  --source ixspy --product-type <品类>
+```
+需 torch + 518 的 DINOv2 缓存（本机已具备）。决策表新增 `max_embedding_similarity`，看板按它排序/筛选可显著降低“形似不同款”的假阳性。
+
 ## 测试
 ```powershell
 pytest -v

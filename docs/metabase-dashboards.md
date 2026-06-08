@@ -67,8 +67,9 @@ GRANT SELECT ON v_erp_image_decisions, erp_image_decisions TO metabase_ro;
 Metabase 卡片 SQL：
 ```sql
 SELECT external_sku, external_product_name, final_decision, boss_action,
-       candidate_count, normal_candidate_count, top_erp_skus
+       candidate_count, normal_candidate_count, top_erp_skus, max_embedding_similarity
 FROM v_erp_image_decisions
-ORDER BY is_new_opportunity DESC, candidate_count DESC;
+ORDER BY max_embedding_similarity DESC NULLS LAST, candidate_count DESC;
 ```
+max_embedding_similarity 是 DINOv2 嵌入复核分（需先跑 erp-image-rerank），越高越可能真同款；空值表示未做嵌入复核。
 按 `final_decision` 筛“疑似新品机会”即得过了 ERP 查重的真实新品候选。
