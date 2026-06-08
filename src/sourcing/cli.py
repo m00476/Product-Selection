@@ -9,6 +9,7 @@ from sourcing.bridge.run import bridge_matches
 from sourcing.bridge.external_importer import import_external_products
 from sourcing.bridge.image_decisions import load_image_decisions
 from sourcing.rerank.embed import rerank_image_search
+from sourcing.erp_image_pipeline import run_pipeline
 
 
 def main() -> None:
@@ -57,6 +58,12 @@ def main() -> None:
     rr.add_argument("--product-type", required=True)
     rr.add_argument("--limit", type=int, default=None)
     rr.add_argument("--threshold", type=float, default=0.85)
+
+    pipe = sub.add_parser("erp-image-pipeline", help="一键: 图搜粗筛+嵌入精配+落库+报告")
+    pipe.add_argument("--source", required=True, choices=["seerfar", "ixspy", "aliexpress"])
+    pipe.add_argument("--product-type", required=True)
+    pipe.add_argument("--limit", type=int, default=None)
+    pipe.add_argument("--threshold", type=float, default=0.85)
 
     args = parser.parse_args()
 
@@ -126,6 +133,11 @@ def main() -> None:
                 conn, source=args.source, product_type=args.product_type,
                 base_dir=config.collect_base_dir())
             print(f"[DONE] image decisions loaded: {summary}")
+        elif args.command == "erp-image-pipeline":
+            summary = run_pipeline(
+                conn, source=args.source, product_type=args.product_type,
+                base_dir=config.collect_base_dir(), limit=args.limit, threshold=args.threshold)
+            print(f"[DONE] pipeline: {summary}")
     finally:
         conn.close()
 

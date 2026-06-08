@@ -234,3 +234,23 @@ def test_cli_erp_image_rerank(monkeypatch):
     )
     cli.main()
     assert calls["source"] == "ixspy" and calls["limit"] == 30 and calls["base_dir"] == "/base518"
+
+
+def test_cli_erp_image_pipeline(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "erp-image-pipeline", "--source", "ixspy",
+        "--product-type", "home_goods", "--limit", "50", "--threshold", "0.8",
+    ])
+    monkeypatch.setattr(cli.config, "database_url", lambda: "db")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: FakeConn())
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(
+        cli, "run_pipeline",
+        lambda conn, *, source, product_type, base_dir, limit, threshold:
+            calls.update(source=source, product_type=product_type, base_dir=base_dir,
+                         limit=limit, threshold=threshold) or {"report": {"products": 50}},
+    )
+    cli.main()
+    assert calls == {"source": "ixspy", "product_type": "home_goods",
+                     "base_dir": "/base518", "limit": 50, "threshold": 0.8}
