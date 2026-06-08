@@ -639,10 +639,32 @@ def _build_multipart_body(fields: dict[str, str], files: dict[str, tuple[str, by
     return b"".join(chunks), boundary
 
 
-BEST_MATCH_FIELDS = [
-    "竞品SKU", "竞品名称", "竞品图", "竞品链接", "最像ERP_SKU", "ERP主SKU",
-    "ERP商品状态", "ERP候选图", "嵌入相似度", "匹配判定",
+# 老板版报告的外部业务字段：报表列名 -> 输入CSV里可能的列名(按序取第一个非空)
+_EXTERNAL_BIZ_FIELDS = [
+    ("品牌", ["brand"]),
+    ("类目", ["category"]),
+    ("单价", ["price"]),
+    ("累计销量", ["sales"]),
+    ("近7天销量", ["sales_7d"]),
+    ("评论数", ["review_count"]),
+    ("评分", ["rating", "review_rating"]),
+    ("卖家", ["seller_name"]),
+    ("卖家好评率", ["seller_positive_rate"]),
 ]
+
+BEST_MATCH_FIELDS = [
+    "竞品SKU", "竞品名称", "品牌", "类目", "单价", "累计销量", "近7天销量",
+    "评论数", "评分", "卖家", "卖家好评率", "竞品图", "竞品链接",
+    "最像ERP_SKU", "ERP主SKU", "ERP商品状态", "ERP候选图", "嵌入相似度", "匹配判定",
+]
+
+
+def _biz(row: dict, names: list[str]):
+    for name in names:
+        value = row.get(name)
+        if value not in (None, "", "None"):
+            return value
+    return ""
 
 
 def _embedding_value(row: dict) -> float:
@@ -664,8 +686,10 @@ def best_match_verdict(sim: float) -> str:
     return "无匹配(疑似不同款)"
 
 
-def build_best_match_rows(rows: list[dict]) -> list[dict]:
-    """每个竞品取嵌入相似度最高的候选(B口径: 无匹配也保留最像候选), 输出一商品一行。"""
+def build_best_match_rows(rows: list[dict], external_index: dict | None = None) -> list[dict]:
+    """每个竞品取嵌入相似度最高的候选(B口径: 无匹配也保留最像候选), 输出一商品一行。
+    external_index: {external_sku: 输入CSV行} —— 给齐了就把单价/销量等业务字段合进来(老板版)。"""
+    external_index = external_index or {}
     groups: dict[str, list[dict]] = {}
     order: list[str] = []
     for row in rows:
@@ -680,9 +704,11 @@ def build_best_match_rows(rows: list[dict]) -> list[dict]:
         candidates = [it for it in items if it.get("erp_image_url")] or items
         best = max(candidates, key=_embedding_value)
         sim = _embedding_value(best)
+        ext = external_index.get(key, {})
         out.append({
             "竞品SKU": key,
             "竞品名称": (best.get("external_product_name") or "")[:60],
+            **{col: _biz(ext, names) for col, names in _EXTERNAL_BIZ_FIELDS},
             "竞品图": best.get("external_image_url", ""),
             "竞品链接": best.get("external_product_url", ""),
             "最像ERP_SKU": best.get("matched_erp_sku", ""),
@@ -699,9 +725,22 @@ def best_match_csv_path(base_dir, source: str, product_type: str) -> Path:
     return Path(base_dir) / "output" / "image_search" / source / product_type / "best_match_report.csv"
 
 
+def _external_index(base_dir, source: str, product_type: str) -> dict:
+    """从输入CSV按 sku 建索引，给老板版报告补业务字段。读不到就返回空。"""
+    index = {}
+    try:
+        for row in _read_csv_dicts(input_csv_path(base_dir, source, product_type)):
+            sku = (row.get("sku") or "").strip()
+            if sku:
+                index[sku] = row
+    except (FileNotFoundError, OSError):
+        pass
+    return index
+
+
 def generate_best_match_report(*, source: str, product_type: str, base_dir="." ) -> dict:
     rows = _read_csv_dicts(output_csv_path(base_dir, source, product_type))
-    out = build_best_match_rows(rows)
+    out = build_best_match_rows(rows, _external_index(base_dir, source, product_type))
     out.sort(key=lambda r: r["嵌入相似度"] if isinstance(r["嵌入相似度"], float) else -1.0,
              reverse=True)
     csv_path = write_csv(str(best_match_csv_path(base_dir, source, product_type)),

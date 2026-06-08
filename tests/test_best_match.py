@@ -31,3 +31,27 @@ def test_build_best_match_picks_highest_and_keeps_candidate():
     assert e2["最像ERP_SKU"] == "ERP_x"          # B口径: 无匹配也保留最像候选
     assert e2["ERP候选图"] == "erp_x"
     assert e2["匹配判定"] == "无匹配(疑似不同款)"
+
+
+def test_build_best_match_enriches_business_fields():
+    rows = [{"external_sku": "E1", "external_product_name": "Comp A", "external_image_url": "qa",
+             "matched_erp_sku": "ERP1", "erp_image_url": "erp1",
+             "erp_product_status_text": "正常商品", "embedding_similarity": "0.9"}]
+    ext = {"E1": {"sku": "E1", "price": "12.5", "sales": "2000", "sales_7d": "300",
+                  "review_count": "50", "rating": "4.6", "brand": "X", "category": "家居",
+                  "seller_name": "ShopX", "seller_positive_rate": "98%"}}
+    r = build_best_match_rows(rows, ext)[0]
+    assert r["单价"] == "12.5"
+    assert r["累计销量"] == "2000"
+    assert r["近7天销量"] == "300"
+    assert r["评分"] == "4.6"
+    assert r["卖家"] == "ShopX"
+    assert r["品牌"] == "X"
+    assert r["最像ERP_SKU"] == "ERP1"        # ERP 匹配信息仍在
+
+
+def test_build_best_match_blank_business_when_no_index():
+    rows = [{"external_sku": "E1", "external_product_name": "A", "erp_image_url": "e1",
+             "matched_erp_sku": "ERP1", "embedding_similarity": "0.9"}]
+    r = build_best_match_rows(rows)[0]
+    assert r["单价"] == "" and r["累计销量"] == ""   # 没给索引 -> 业务字段空
