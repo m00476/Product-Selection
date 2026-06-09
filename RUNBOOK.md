@@ -37,6 +37,19 @@ python -m sourcing.cli collect --source ixspy --product-type garden_tools
 python -m sourcing.cli erp-image-pipeline --source ixspy --product-type garden_tools
 ```
 
+### 一条龙命令（推荐，供计划任务调用）
+
+把"采集 + 匹配 + 报告"串成一条命令，**带退出码 + 日志文件**：
+
+```bash
+python -m sourcing.cli run-product --source ixspy --product-type garden_tools --category 园林工具 --headless
+```
+
+- 采集失败会**立刻停止**，不会拿错/空数据继续出报告
+- `--headless` 无界面跑（无人值守）；不加则显示 Chrome
+- `--category` 也可不传，改写在 `.env` 的 `ALIEXPRESS_CATEGORY_NAME`（Windows 下推荐这样，避免中文在 bat 里的编码问题）
+- 退出码：`0`=成功 / `1`=失败；日志写到 `<base_dir>/output/logs/<品类>/run_<时间戳>.log`
+
 第①步内部分两小步：
 - **probe**（`aliexpress_api_probe`）：用浏览器嗅出真正返回商品 JSON 的内部接口 → `output/aliexpress/<品类>/aliexpress_api_candidates.json`
 - **fetch**（`aliexpress_api_fetch`）：纯 HTTP 回放该接口翻页拉全量 → `input/aliexpress/<品类>/aliexpress_products.csv` → 导库
@@ -112,6 +125,16 @@ python -m sourcing.cli erp-image-decision-report --source ixspy --product-type k
 ```
 
 ---
+
+## 4.5 定时自动化（Windows 计划任务）
+
+1. 编辑 `scripts\run_product.bat`，把 `PRODUCT` 改成你的品类 slug；类目名写在 `.env` 的 `ALIEXPRESS_CATEGORY_NAME`。
+2. 打开"任务计划程序" → 创建基本任务 → 触发器（如每天 02:00）→ 操作选"启动程序" → 程序填 `D:\ProductSourcingSystem\scripts\run_product.bat`。
+3. 勾选"不管用户是否登录都运行"（无人值守）。计划任务会根据退出码（0/1）记录成功/失败。
+4. 排查看日志：`D:\518\output\logs\<品类>\run_<时间戳>.log`。
+
+> 多品类：复制多份 bat（各自改 `PRODUCT` + 对应 `.env` 类目）或建多个任务。
+> 类目没选中时一条龙会 fail-fast（退出码 1），不会静默抓错品类——计划任务能立刻发现。
 
 ## 5. 常见问题
 

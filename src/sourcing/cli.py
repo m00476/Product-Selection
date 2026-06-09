@@ -70,6 +70,14 @@ def main() -> None:
     mr.add_argument("--product-type", required=True)
     mr.add_argument("--base-dir", default=None)
 
+    rp = sub.add_parser("run-product", help="一条龙: 采集→图片两层匹配→报告(带退出码+日志,供计划任务调用)")
+    rp.add_argument("--source", default="ixspy", choices=["seerfar", "ixspy"])
+    rp.add_argument("--product-type", required=True, help="内部英文 slug(决定文件夹/库标签)")
+    rp.add_argument("--category", default=None, help="ixspy 类目中文名(写入 ALIEXPRESS_CATEGORY_NAME)")
+    rp.add_argument("--headless", action="store_true", help="无界面跑 Chrome(无人值守)")
+    rp.add_argument("--limit", type=int, default=None)
+    rp.add_argument("--threshold", type=float, default=0.85)
+
     sub.add_parser("migrate-embedding-cache",
                    help="一次性把嵌入缓存 pkl 迁到 SQLite(之后精筛内存恒定,需内存充裕时跑)")
 
@@ -164,8 +172,45 @@ def main() -> None:
                 conn, source=args.source, product_type=args.product_type,
                 base_dir=config.collect_base_dir(), limit=args.limit, threshold=args.threshold)
             print(f"[DONE] pipeline: {summary}")
+        elif args.command == "run-product":
+            raise SystemExit(_run_product_cli(conn, args))
     finally:
         conn.close()
+
+
+def _run_product_cli(conn, args) -> int:
+    """跑一条龙并写日志文件；返回进程退出码(0 成功 / 1 失败)，供 Windows 计划任务判断。"""
+    import datetime
+    from pathlib import Path
+    from sourcing.run_product import run_product
+
+    base = config.collect_base_dir()
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_dir = Path(base) / "output" / "logs" / args.product_type
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"run_{stamp}.log"
+    log_file = open(log_path, "a", encoding="utf-8")
+
+    def emit(message: str) -> None:
+        line = f"{datetime.datetime.now().isoformat(timespec='seconds')} {message}"
+        print(line)
+        log_file.write(line + "\n")
+        log_file.flush()
+
+    emit(f"[run-product] log -> {log_path}")
+    try:
+        result = run_product(
+            conn, source=args.source, product_type=args.product_type, base_dir=base,
+            category=args.category, headless=args.headless or None,
+            limit=args.limit, threshold=args.threshold, emit=emit)
+    except Exception as error:  # 采集子进程抛错(如类目未选中)也算失败
+        emit(f"[run-product] ERROR: {error}")
+        log_file.close()
+        return 1
+    status = result.get("status")
+    emit(f"[run-product] DONE status={status}")
+    log_file.close()
+    return 0 if status == "success" else 1
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from sourcing.collect.api_common import find_record_lists, product_score, request_json, read_json, write_csv, write_json
+from sourcing.collect.probe_util import wait_until, should_fail_category
 
 load_dotenv()
 
@@ -20,6 +21,22 @@ IXSPY_PASSWORD = os.environ.get("IXSPY_PASSWORD", "")
 ALIEXPRESS_CATEGORY_NAME = os.environ.get("ALIEXPRESS_CATEGORY_NAME", os.environ.get("IXSPY_CATEGORY_NAME", ""))
 ALIEXPRESS_SCROLL_ROUNDS = int(os.environ.get("ALIEXPRESS_SCROLL_ROUNDS") or 80)
 SCRAPER_HEADLESS = os.environ.get("SCRAPER_HEADLESS", "0").lower() in {"1", "true", "yes"}
+PAGE_READY_TIMEOUT = int(os.environ.get("SCRAPER_PAGE_READY_TIMEOUT") or 30)
+
+
+def _wait_ready(driver, timeout: float) -> None:
+    """有界等待：页面 readyState=complete 且无 el-loading-mask，或超时。替代固定 sleep。"""
+    def ready():
+        try:
+            state = driver.execute_script("return document.readyState")
+            loading = driver.execute_script(
+                "return Array.from(document.querySelectorAll('.el-loading-mask'))"
+                ".some(node => node.offsetParent !== null);"
+            )
+            return state == "complete" and not loading
+        except Exception:
+            return False
+    wait_until(ready, timeout=timeout, interval=0.5)
 
 
 @dataclass(frozen=True)
@@ -406,12 +423,17 @@ def main():
             driver.get(token_url)
         except Exception:
             print("  [WARN] IXSPY token page timed out; continuing with current browser session")
-        time.sleep(6)
+        _wait_ready(driver, PAGE_READY_TIMEOUT)
         driver.get(ALIEXPRESS_IXSPY_LIST_URL)
-        time.sleep(8)
+        _wait_ready(driver, PAGE_READY_TIMEOUT)
         browser_logs(driver)
-        if not search_category(driver, ALIEXPRESS_CATEGORY_NAME):
+        selected = search_category(driver, ALIEXPRESS_CATEGORY_NAME)
+        if should_fail_category(ALIEXPRESS_CATEGORY_NAME, selected):
             save_debug_artifacts(driver, paths.output_dir, "aliexpress_api_probe_search_failed")
+            raise RuntimeError(
+                f"类目未选中，已中止以防抓到错误品类数据: category={ALIEXPRESS_CATEGORY_NAME!r}。"
+                f"请核对类目名是否与 ixspy 联想项一致(可设 SCRAPER_HEADLESS=0 观察)。"
+            )
 
         scroll_page(driver)
         visible_products = extract_visible_products(driver)
