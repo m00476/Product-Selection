@@ -11,10 +11,16 @@
 - ERP 粗筛结果追加：ERP 候选 SKU、主 SKU、商品状态、ERP 候选图、ERP 图搜相似度。
 - 模型精筛结果追加：DINOv2 图片相似度、匹配判定、老板建议。
 
-最终重点文件是：
+最终重点文件是中文品类名加生成时间的老板版 Excel：
 
 ```text
-output/platform_export_match/ixspy/<product_type>/<batch>/boss_report.xlsx
+output/platform_export_match/ixspy/<product_type>/<batch>/<product_type_name>_yyyyMMdd_HHmmss.xlsx
+```
+
+示例：
+
+```text
+output/platform_export_match/ixspy/mother_baby/2026-06-10_week/母婴_20260610_093012.xlsx
 ```
 
 ## 目录约定
@@ -331,7 +337,7 @@ best_match_csv_path()
 最终输出：
 
 ```text
-boss_report.xlsx
+<product_type_name>_yyyyMMdd_HHmmss.xlsx
 matched_report.csv
 raw_erp_image_search.csv
 boss_decision_report.csv
@@ -435,7 +441,8 @@ python -m sourcing.cli platform-export-finalize `
 ```powershell
 python -X utf8 -c "import pandas as pd; base=r'D:\ProductSourcingSystem\output\platform_export_match\ixspy\home_decoration\2026-06-09_week'; raw=pd.read_csv(base+r'\raw_erp_image_search.csv'); print('raw_rows', len(raw)); print('match_status', raw['match_status'].value_counts(dropna=False).to_dict()); print('embedding_nonempty', (raw.get('embedding_similarity','').fillna('')!='').sum() if 'embedding_similarity' in raw else 'NA')"
 
-python -X utf8 -c "import pandas as pd; p=r'D:\ProductSourcingSystem\output\platform_export_match\ixspy\home_decoration\2026-06-09_week\boss_report.xlsx'; df=pd.read_excel(p); print('shape', df.shape); print('标准化类目', df['标准化类目'].value_counts(dropna=False).to_dict()); print('匹配判定', df['匹配判定'].value_counts(dropna=False).to_dict()); print('老板建议', df['老板建议'].value_counts(dropna=False).to_dict())"
+$report = Get-ChildItem -LiteralPath "D:\ProductSourcingSystem\output\platform_export_match\ixspy\home_decoration\2026-06-09_week" -Filter "*.xlsx" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+python -X utf8 -c "import pandas as pd; p=r'$($report.FullName)'; df=pd.read_excel(p); print('shape', df.shape); print('标准化类目', df['标准化类目'].value_counts(dropna=False).to_dict()); print('匹配判定', df['匹配判定'].value_counts(dropna=False).to_dict()); print('老板建议', df['老板建议'].value_counts(dropna=False).to_dict())"
 ```
 
 项目级测试：
@@ -478,7 +485,7 @@ downloaded_at
 
 5. 先跑 prepare 检查行数和图片。
 6. 再跑 `platform-export-pipeline`。
-7. 打开 `boss_report.xlsx` 看老板版结果。
+7. 打开输出目录里最新的 `<product_type_name>_yyyyMMdd_HHmmss.xlsx` 看老板版结果。
 
 ## 已知注意事项
 

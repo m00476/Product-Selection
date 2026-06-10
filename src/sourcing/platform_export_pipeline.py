@@ -1,6 +1,7 @@
 import csv
 import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +40,29 @@ def infer_aliexpress_image_url(filename: str, base_url: str = "https://ae-pic-a1
     return base_url.rstrip("/") + "/" + filename
 
 
+def _row_image_filenames(html: str, n_rows: int) -> list[str]:
+    """逐 <tr> 取该行行内的 ./images 图片文件名，保证"行↔图"严格对齐。
+
+    旧做法用全局 image_refs[index]：某行缺图就会让后面所有行图片整体错位，
+    且不报错(静默错配，整份报告作废还看不出来)。改为行内取图后：
+      - 某行缺图 -> 只有该行为空，后续行不受影响
+      - 数据行数与表格行数对不上 -> 抛 ValueError，拒绝静默错配
+    """
+    tr_blocks = re.findall(r"<tr[\s>].*?</tr>", html, flags=re.I | re.S)
+    # pandas.read_html 恒把首个 <tr> 当表头消费掉，故数据行 = 其余 <tr>
+    data_trs = tr_blocks[1:]
+    if len(data_trs) != n_rows:
+        raise ValueError(
+            f"表格数据行数({len(data_trs)})与解析出的商品行数({n_rows})对不上，"
+            f"无法保证图片与商品一一对应，已中止以防静默错配。请检查 source.xls。"
+        )
+    filenames = []
+    for tr in data_trs:
+        match = re.search(r"<img\s+src=['\"]\.\/images\/([^'\"]+)['\"]", tr, flags=re.I)
+        filenames.append(match.group(1) if match else "")
+    return filenames
+
+
 def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = None) -> tuple[list[dict], list[dict]]:
     batch_path = Path(batch_dir)
     source_path = batch_path / "source.xls"
@@ -49,9 +73,10 @@ def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = 
         raise FileNotFoundError(image_dir)
 
     html = source_path.read_text(encoding="utf-8", errors="ignore")
-    image_refs = re.findall(r"<img\s+src=['\"]\.\/images\/([^'\"]+)['\"]", html, flags=re.I)
     table = pd.read_html(source_path)[0].fillna("")
     original_rows = table.astype(str).to_dict("records")
+    # 行内取图 + 对齐校验，避免某行缺图导致后续整体错位的静默错配
+    image_refs = _row_image_filenames(html, len(original_rows))
 
     metadata = _read_metadata(batch_path / "metadata.yaml")
     product_type_name = metadata.get("product_type_name", "")
@@ -335,6 +360,7 @@ def write_final_reports(
     batch_dir = batch_input_dir(base_dir, platform, product_type, batch)
     batch_out = batch_output_dir(base_dir, platform, product_type, batch)
     original_rows, standard_rows = read_platform_export(batch_dir)
+    metadata = _read_metadata(batch_dir / "metadata.yaml")
     result_rows = _read_csv_dicts(erp_image_search.output_csv_path(staging_base_dir, source, product_type))
     best_by_sku = _best_result_by_sku(result_rows)
 
@@ -366,7 +392,7 @@ def write_final_reports(
         )
 
     csv_path = batch_out / "matched_report.csv"
-    xlsx_path = batch_out / "boss_report.xlsx"
+    xlsx_path = batch_out / _boss_report_filename(metadata.get("product_type_name") or product_type)
     pd.DataFrame(final_rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
     pd.DataFrame(final_rows).to_excel(xlsx_path, index=False)
 
@@ -404,6 +430,13 @@ def _best_result_by_sku(rows: list[dict]) -> dict[str, dict]:
 def _read_csv_dicts(path: str | Path) -> list[dict]:
     with Path(path).open("r", encoding="utf-8-sig", newline="") as file:
         return list(csv.DictReader(file))
+
+
+def _boss_report_filename(product_name: str) -> str:
+    safe_name = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "_", _clean(product_name)).strip(" ._")
+    safe_name = safe_name or "商品"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{safe_name}_{timestamp}.xlsx"
 
 
 def _clean(value) -> str:
