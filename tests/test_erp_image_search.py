@@ -299,3 +299,23 @@ def test_boss_decision_fields_all_have_chinese_labels():
 def test_client_requires_token():
     with pytest.raises(RuntimeError, match="ERP_IMAGE_SEARCH_TOKEN"):
         erp_image_search.ErpImageSearchClient(token="")
+
+
+def test_normalize_classifies_status_404_as_auth_error():
+    """ERP 鉴权失败返回 {"status":404,...}(无 code 字段)，应判为 error 且 code=404，
+    这样 _is_auth_failure 能触发自动刷新（之前被误判成 empty 导致不刷新）。"""
+    from sourcing.erp_image_search import normalize_search_response, _is_auth_failure
+    payload = {"error": "Not Found", "message": "Not Found",
+               "path": "/prodetail/picSearchFunds", "status": 404}
+    result = normalize_search_response(payload)
+    assert result.status == "error"
+    assert result.code == 404
+    assert _is_auth_failure(result) is True
+
+
+def test_normalize_keeps_success_with_code_200():
+    from sourcing.erp_image_search import normalize_search_response
+    payload = {"code": 200, "data": [{"sku": "E1", "url": "u1"}]}
+    result = normalize_search_response(payload)
+    assert result.status == "success"
+    assert result.code == 200

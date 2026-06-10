@@ -313,12 +313,17 @@ def normalize_search_response(payload: dict) -> SearchResult:
                 "similarity": _number(_first(product, ["similarity", "score"])),
             }
         )
-    status = "success" if payload.get("code") == 200 and matches else "empty"
-    if payload.get("code") not in (None, 200):
+    # ERP 鉴权失败用 {"status":404} 而非 {"code":...}；缺 code 时回退用数字 status 当 code，
+    # 否则 404 会被误判成 empty，导致 token 过期时自动刷新无法触发。
+    code = payload.get("code")
+    if code is None and isinstance(payload.get("status"), int):
+        code = payload.get("status")
+    status = "success" if code == 200 and matches else "empty"
+    if code not in (None, 200):
         status = "error"
     return SearchResult(
         status=status,
-        code=payload.get("code"),
+        code=code,
         message=str(payload.get("msg") or payload.get("message") or ""),
         trace_id=str(payload.get("traceId") or ""),
         matches=matches,
