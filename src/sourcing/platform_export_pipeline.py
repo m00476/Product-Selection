@@ -1,7 +1,8 @@
 import csv
+import hashlib
 import re
 import shutil
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -61,6 +62,117 @@ def _row_image_filenames(html: str, n_rows: int) -> list[str]:
         match = re.search(r"<img\s+src=['\"]\.\/images\/([^'\"]+)['\"]", tr, flags=re.I)
         filenames.append(match.group(1) if match else "")
     return filenames
+
+
+# ===== 一键自动：从下载文件夹直接整理 + 跑全流程(无需手动定 slug/batch/metadata) =====
+
+_PRODUCT_DIR_RE = re.compile(r"^Product[_\d]", re.I)
+
+
+def _derive_slug(name: str) -> str:
+    """中文品类名 → 稳定的 ascii slug(内部文件夹/嵌入缓存命名用)。
+    保留可读的 ascii 部分 + 8 位哈希保证唯一且稳定。"""
+    name = (name or "").strip()
+    ascii_part = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
+    digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:8]
+    return f"{ascii_part}_{digest}" if ascii_part else f"cat_{digest}"
+
+
+def _derive_batch(inner_name: str, *, today: date | None = None) -> str:
+    """从内层目录名(如 Product_2026_6_10_9_02_55_week)解析日期 → 2026-06-10_week；
+    解析不到则用今天。"""
+    match = re.search(r"(\d{4})_(\d{1,2})_(\d{1,2})", inner_name or "")
+    if match:
+        year, month, day = (int(x) for x in match.groups())
+        return f"{year:04d}-{month:02d}-{day:02d}_week"
+    return (today or date.today()).strftime("%Y-%m-%d_week")
+
+
+def _derive_category_name(src: str | Path) -> str:
+    """拖进来的文件夹名即中文品类名；若拖的是最内层 Product_xxx 目录，则取其父目录名。"""
+    path = Path(src)
+    if _PRODUCT_DIR_RE.match(path.name):
+        return path.parent.name
+    return path.name
+
+
+def _find_export_source(root: str | Path) -> tuple[Path, Path, str]:
+    """在 root 下(含自身及子目录)找到同时含 *.xls 与 images/ 的目录。
+    返回 (xls路径, images目录, 该目录名)。找不到抛 FileNotFoundError。"""
+    root = Path(root)
+    candidates = [root, *(p for p in root.rglob("*") if p.is_dir())]
+    for directory in candidates:
+        xls_files = sorted(directory.glob("*.xls"))
+        if xls_files and (directory / "images").is_dir():
+            return xls_files[0], directory / "images", directory.name
+    raise FileNotFoundError(f"在 {root} 下找不到同时含 .xls 和 images/ 的目录")
+
+
+def prepare_from_download(src: str | Path, *, base_dir: str | Path,
+                          platform: str = "ixspy") -> dict:
+    """从原始下载文件夹自动整理到标准输入目录(拷 source.xls + images + 写 metadata.yaml)。
+    自动推导 中文品类名 / slug / 批次。返回 dict(platform, product_type=slug, batch, product_type_name, input_dir)。"""
+    xls_path, images_dir, inner_name = _find_export_source(src)
+    category_name = _derive_category_name(src)
+    slug = _derive_slug(category_name)
+    batch = _derive_batch(inner_name)
+
+    dst = batch_input_dir(base_dir, platform, slug, batch)
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(xls_path, dst / "source.xls")
+    dst_images = dst / "images"
+    if dst_images.exists():
+        shutil.rmtree(dst_images)
+    shutil.copytree(images_dir, dst_images)
+
+    metadata = (
+        f"platform: {platform}\n"
+        f"product_type: {slug}\n"
+        f"product_type_name: {category_name}\n"
+        f"source: 速卖通产品-新品增长榜\n"
+        f"period: {batch}\n"
+        f"downloaded_at: {date.today().isoformat()}\n"
+        f"original_source:\n"
+        f"  directory: {Path(src)}\n"
+        f"  table_file: {xls_path.name}\n"
+        f"standardized_files:\n"
+        f"  table_file: source.xls\n"
+        f"  image_dir: images\n"
+        f"image_url_infer:\n"
+        f"  enabled: true\n"
+        f"  base_url: https://ae-pic-a1.aliexpress-media.com/kf/\n"
+    )
+    (dst / "metadata.yaml").write_text(metadata, encoding="utf-8")
+
+    return {
+        "platform": platform,
+        "product_type": slug,
+        "batch": batch,
+        "product_type_name": category_name,
+        "input_dir": str(dst),
+    }
+
+
+def default_base_dir() -> str:
+    """平台导出数据恒落在本项目下(此文件在 src/sourcing/，上溯两级即项目根)，
+    免去手动设 COLLECT_518_DIR。"""
+    return str(Path(__file__).resolve().parents[2])
+
+
+def run_from_download(src: str | Path, *, base_dir: str | Path | None = None,
+                      platform: str = "ixspy", source: str = "ixspy",
+                      limit: int | None = None, delay_seconds: float = 0.5,
+                      threshold: float = 0.85) -> dict:
+    """一键：原始下载文件夹 → 整理 → 解析 → 双筛 → 报告。返回流程结果(含 auto 推导信息)。"""
+    base_dir = base_dir or default_base_dir()
+    info = prepare_from_download(src, base_dir=base_dir, platform=platform)
+    result = run_platform_export_pipeline(
+        base_dir=base_dir, platform=platform, product_type=info["product_type"],
+        batch=info["batch"], source=source, limit=limit,
+        delay_seconds=delay_seconds, threshold=threshold)
+    result["auto"] = info
+    result["report_dir"] = str(batch_output_dir(base_dir, platform, info["product_type"], info["batch"]))
+    return result
 
 
 def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = None) -> tuple[list[dict], list[dict]]:

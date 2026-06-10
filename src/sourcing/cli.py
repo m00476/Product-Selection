@@ -110,7 +110,30 @@ def main() -> None:
     pef.add_argument("--threshold", type=float, default=0.85)
     pef.add_argument("--chunk-size", type=int, default=25)
 
+    per = sub.add_parser("platform-export-run",
+                         help="一键: 给原始下载文件夹, 自动整理+解析+双筛+出报告(拖拽bat调它)")
+    per.add_argument("--src", required=True, help="IXSPY 下载的品类文件夹(含 .xls 和 images)")
+    per.add_argument("--limit", type=int, default=None, help="小样本测试用, 如 --limit 30")
+    per.add_argument("--delay", type=float, default=0.1)
+    per.add_argument("--threshold", type=float, default=0.85)
+
     args = parser.parse_args()
+
+    if args.command == "platform-export-run":
+        from sourcing.platform_export_pipeline import run_from_download
+        result = run_from_download(
+            args.src, limit=args.limit, delay_seconds=args.delay, threshold=args.threshold)
+        auto = result.get("auto", {})
+        report_dir = result.get("report_dir", "")
+        print(f"[DONE] 品类: {auto.get('product_type_name')} | 批次: {auto.get('batch')} | "
+              f"匹配: {result.get('final', {}).get('matched')}/{result.get('final', {}).get('products')}")
+        print(f"[报告目录] {report_dir}")
+        try:
+            import os
+            os.startfile(report_dir)  # Windows: 跑完自动打开报告文件夹
+        except Exception:
+            pass
+        return
 
     if args.command == "migrate-embedding-cache":
         from sourcing.rerank.embed import _import_iem, sqlite_cache_path
