@@ -1,2 +1,2 @@
-source_rank,sku,product_name,brand,category,image_url,price,product_url
-1,1005006,Mini Speaker Pro,GenericStore,Audio,https://img/y.jpg,12.5,https://www.aliexpress.com/item/1005006.html
+source_rank,sku,product_name,brand,category,image_url,price,product_url,sales,sales_1y,sales_7d,review_count,comments_1y,rating,weekly_growth,first_found_at,avg_daily_sales_1y,fulfillment_type,choice,choice_type,seller_id,seller_name
+1,1005006,Mini Speaker Pro,GenericStore,Audio,https://img/y.jpg,12.5,https://www.aliexpress.com/item/1005006.html,2000,2000,300,50,50,4.6,120,2026-04-20,5,半托管,1,2,777,ShopX

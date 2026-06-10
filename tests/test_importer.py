@@ -44,6 +44,15 @@ def test_import_three_sources_end_to_end(conn):
             (ali_product_id,),
         )
         assert cur.fetchone()[0] == 2
+        cur.execute(
+            "SELECT sales, review_count, review_rating FROM sales_snapshots "
+            "WHERE product_id=%s AND source='ixspy'",
+            (ali_product_id,),
+        )
+        ixspy_sales, ixspy_reviews, ixspy_rating = cur.fetchone()
+        assert float(ixspy_sales) == 2000
+        assert ixspy_reviews == 50
+        assert float(ixspy_rating) == 4.6
 
         cur.execute("SELECT count(*) FROM products WHERE is_own=true")
         assert cur.fetchone()[0] == 1

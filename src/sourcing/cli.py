@@ -10,6 +10,11 @@ from sourcing.bridge.external_importer import import_external_products
 from sourcing.bridge.image_decisions import load_image_decisions
 from sourcing.rerank.embed import rerank_image_search
 from sourcing.erp_image_pipeline import run_pipeline
+from sourcing.platform_export_pipeline import (
+    finalize_platform_export_pipeline,
+    prepare_standard_input,
+    run_platform_export_pipeline,
+)
 
 
 def main() -> None:
@@ -81,6 +86,30 @@ def main() -> None:
     sub.add_parser("migrate-embedding-cache",
                    help="一次性把嵌入缓存 pkl 迁到 SQLite(之后精筛内存恒定,需内存充裕时跑)")
 
+    pep = sub.add_parser("platform-export-pipeline", help="用平台下载包跑 ERP 图搜、精筛和老板报告")
+    pep.add_argument("--platform", default="ixspy")
+    pep.add_argument("--source", default="ixspy", choices=["ixspy"])
+    pep.add_argument("--product-type", required=True)
+    pep.add_argument("--batch", required=True)
+    pep.add_argument("--limit", type=int, default=None)
+    pep.add_argument("--delay", type=float, default=0.5)
+    pep.add_argument("--threshold", type=float, default=0.85)
+
+    pes = sub.add_parser("platform-export-prepare", help="只把平台下载包转成标准化中间 CSV")
+    pes.add_argument("--platform", default="ixspy")
+    pes.add_argument("--source", default="ixspy", choices=["ixspy"])
+    pes.add_argument("--product-type", required=True)
+    pes.add_argument("--batch", required=True)
+
+    pef = sub.add_parser("platform-export-finalize", help="基于已有平台导出图搜结果继续精筛并生成最终报告")
+    pef.add_argument("--platform", default="ixspy")
+    pef.add_argument("--source", default="ixspy", choices=["ixspy"])
+    pef.add_argument("--product-type", required=True)
+    pef.add_argument("--batch", required=True)
+    pef.add_argument("--limit", type=int, default=None)
+    pef.add_argument("--threshold", type=float, default=0.85)
+    pef.add_argument("--chunk-size", type=int, default=25)
+
     args = parser.parse_args()
 
     if args.command == "migrate-embedding-cache":
@@ -92,6 +121,45 @@ def main() -> None:
         sqlite_path = sqlite_cache_path()
         n = migrate_pickle_to_sqlite(pkl, sqlite_path)
         print(f"[DONE] migrated {n} embeddings -> {sqlite_path}")
+        return
+
+    if args.command == "platform-export-prepare":
+        summary = prepare_standard_input(
+            base_dir=config.collect_base_dir(),
+            platform=args.platform,
+            product_type=args.product_type,
+            batch=args.batch,
+            source=args.source,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "platform-export-pipeline":
+        summary = run_platform_export_pipeline(
+            base_dir=config.collect_base_dir(),
+            platform=args.platform,
+            product_type=args.product_type,
+            batch=args.batch,
+            source=args.source,
+            limit=args.limit,
+            delay_seconds=args.delay,
+            threshold=args.threshold,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
+        return
+
+    if args.command == "platform-export-finalize":
+        summary = finalize_platform_export_pipeline(
+            base_dir=config.collect_base_dir(),
+            platform=args.platform,
+            product_type=args.product_type,
+            batch=args.batch,
+            source=args.source,
+            threshold=args.threshold,
+            limit=args.limit,
+            chunk_size=args.chunk_size,
+        )
+        print(json.dumps(summary, ensure_ascii=False, indent=2))
         return
 
     if args.command == "quality":

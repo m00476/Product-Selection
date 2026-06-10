@@ -18,9 +18,14 @@ def test_flatten_aliexpress_record_exports_market_metrics():
             "product_id": "1005012068000940",
             "product_name": "Home Fan",
             "product_price": "12.34",
+            "product_image": "https://img.example/item.jpg",
             "trade_total": "321",
             "trade_7_count": "45",
             "review_total": "67",
+            "trade_inc": "12",
+            "add_time": "1776664779",
+            "choice": "1",
+            "choice_type": "2",
             "ratings": "4.8",
             "store_name": "Home Store",
             "feedback": {"positive_rate": "96.5"},
@@ -29,9 +34,18 @@ def test_flatten_aliexpress_record_exports_market_metrics():
     )
 
     assert row["sales"] == "321"
+    assert row["sales_1y"] == "321"
     assert row["sales_7d"] == "45"
     assert row["review_count"] == "67"
+    assert row["comments_1y"] == "67"
     assert row["rating"] == "4.8"
+    assert row["image_url"] == "https://img.example/item.jpg"
+    assert row["weekly_growth"] == "12"
+    assert row["first_found_at"] == "2026-04-20"
+    assert row["avg_daily_sales_1y"] == "1"
+    assert row["fulfillment_type"] == "半托管"
+    assert row["choice"] == "1"
+    assert row["choice_type"] == "2"
     assert row["seller_name"] == "Home Store"
     assert row["seller_positive_rate"] == "96.5"
     assert row["price"] == "12.34"

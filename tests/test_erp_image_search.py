@@ -252,9 +252,11 @@ def test_generate_boss_decision_report_writes_csv_and_markdown(tmp_path):
     result_path.parent.mkdir(parents=True)
     result_path.write_text(
         "source,product_type,external_sku,external_product_name,external_product_url,external_image_url,"
-        "external_price,external_sales,external_review_count,matched_erp_sku,matched_main_sku,candidate_priority\n"
+        "external_price,external_sales,external_sales_1y,external_sales_7d,external_review_count,"
+        "external_comments_1y,external_weekly_growth,external_first_found_at,external_avg_daily_sales_1y,"
+        "external_fulfillment_type,matched_erp_sku,matched_main_sku,candidate_priority\n"
         "ixspy,bag_accessories,1005,Handle wrap,https://example.test/item/1005.html,"
-        "https://example.test/img.jpg,12.5,300,20,ERP-OK,OK,可用正常商品\n",
+        "https://example.test/img.jpg,12.5,300,300,45,20,20,12,2026-04-20,1,半托管,ERP-OK,OK,可用正常商品\n",
         encoding="utf-8-sig",
     )
 
@@ -272,11 +274,26 @@ def test_generate_boss_decision_report_writes_csv_and_markdown(tmp_path):
     assert csv_rows[0]["系统判断"] == "疑似已有正常同款"
     assert csv_rows[0]["外部平台价格"] == "12.5"
     assert csv_rows[0]["外部平台累计销量"] == "300"
+    assert csv_rows[0]["近一年销量"] == "300"
+    assert csv_rows[0]["近7天销量"] == "45"
+    assert csv_rows[0]["近一年评论数"] == "20"
+    assert csv_rows[0]["周增长数"] == "12"
+    assert csv_rows[0]["首次发现时间"] == "2026-04-20"
+    assert csv_rows[0]["近一年日均销量"] == "1"
+    assert csv_rows[0]["托管类型"] == "半托管"
     assert csv_rows[0]["ERP正常同款数量"] == "1"
     markdown = Path(summary["markdown"]).read_text(encoding="utf-8")
     assert "ERP 以图搜索老板决策报告" in markdown
     assert "Handle wrap" in markdown
     assert "300" in markdown
+
+
+def test_boss_decision_fields_all_have_chinese_labels():
+    missing = [
+        field for field in erp_image_search.BOSS_DECISION_FIELDS
+        if field not in erp_image_search.BOSS_DECISION_FIELD_LABELS
+    ]
+    assert missing == []
 
 
 def test_client_requires_token():

@@ -1,7 +1,7 @@
 import os
 import sys
 
-from sourcing.erp_image_search import output_csv_path, _read_csv_dicts, RESULT_FIELDS
+from sourcing.erp_image_search import output_csv_path, _read_csv_dicts, RESULT_FIELDS, _fields_with_extras
 from sourcing.collect.api_common import write_csv
 
 DEFAULT_THRESHOLD = 0.85
@@ -114,7 +114,7 @@ def rerank_image_search(*, source: str, product_type: str, base_dir: str,
     if embedder is None:
         embedder, matcher = build_embedder(product_type=product_type)
     out = rerank_rows(rows, embedder, threshold=threshold)
-    fields = list(RESULT_FIELDS) + EXTRA_FIELDS
+    fields = _fields_with_extras(list(RESULT_FIELDS) + EXTRA_FIELDS, out)
     write_csv(str(path), out, fields)
     if matcher is not None and hasattr(matcher, "save"):
         matcher.save()

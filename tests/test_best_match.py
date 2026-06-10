@@ -37,13 +37,20 @@ def test_build_best_match_enriches_business_fields():
     rows = [{"external_sku": "E1", "external_product_name": "Comp A", "external_image_url": "qa",
              "matched_erp_sku": "ERP1", "erp_image_url": "erp1",
              "erp_product_status_text": "正常商品", "embedding_similarity": "0.9"}]
-    ext = {"E1": {"sku": "E1", "price": "12.5", "sales": "2000", "sales_7d": "300",
-                  "review_count": "50", "rating": "4.6", "brand": "X", "category": "家居",
+    ext = {"E1": {"sku": "E1", "price": "12.5", "sales_1y": "2000", "sales_7d": "300",
+                  "comments_1y": "50", "weekly_growth": "120", "first_found_at": "2026-04-20",
+                  "avg_daily_sales_1y": "5", "fulfillment_type": "半托管",
+                  "rating": "4.6", "brand": "X", "category": "家居",
                   "seller_name": "ShopX", "seller_positive_rate": "98%"}}
     r = build_best_match_rows(rows, ext)[0]
     assert r["单价"] == "12.5"
-    assert r["累计销量"] == "2000"
+    assert r["近一年销量"] == "2000"
+    assert r["近一年评论数"] == "50"
     assert r["近7天销量"] == "300"
+    assert r["周增长数"] == "120"
+    assert r["首次发现时间"] == "2026-04-20"
+    assert r["近一年日均销量"] == "5"
+    assert r["托管类型"] == "半托管"
     assert r["评分"] == "4.6"
     assert r["卖家"] == "ShopX"
     assert r["品牌"] == "X"
@@ -54,4 +61,4 @@ def test_build_best_match_blank_business_when_no_index():
     rows = [{"external_sku": "E1", "external_product_name": "A", "erp_image_url": "e1",
              "matched_erp_sku": "ERP1", "embedding_similarity": "0.9"}]
     r = build_best_match_rows(rows)[0]
-    assert r["单价"] == "" and r["累计销量"] == ""   # 没给索引 -> 业务字段空
+    assert r["单价"] == "" and r["近一年销量"] == ""   # 没给索引 -> 业务字段空

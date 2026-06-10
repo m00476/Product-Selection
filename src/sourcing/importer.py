@@ -32,10 +32,10 @@ def import_seerfar_csv(conn: psycopg.Connection, path: str, *, product_type: str
 
 def import_ixspy_csv(conn: psycopg.Connection, path: str, *, product_type: str,
                      source_file: str) -> dict:
-    products, prices = read_ixspy(path, product_type)
+    products, prices, sales = read_ixspy(path, product_type)
     rows = read_csv_rows(path)
     count = 0
-    for row, product, price in zip(rows, products, prices):
+    for row, product, price, sale in zip(rows, products, prices, sales):
         raw_id = insert_raw_record(
             conn, source=product.source, platform=product.platform,
             product_type=product_type, source_file=source_file,
@@ -43,6 +43,7 @@ def import_ixspy_csv(conn: psycopg.Connection, path: str, *, product_type: str,
         )
         product_id = upsert_product(conn, product)
         insert_price_snapshot(conn, product_id, price, raw_id)
+        insert_sales_snapshot(conn, product_id, sale, raw_id)
         link_source_record(conn, product, product_id=product_id, raw_id=raw_id)
         count += 1
     return {"products": count}

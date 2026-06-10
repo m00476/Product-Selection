@@ -77,6 +77,61 @@ def nested_first_value(record, paths):
     return ""
 
 
+def normalize_epoch_date(value):
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if re.fullmatch(r"\d{10,13}", text):
+        timestamp = int(text)
+        if len(text) == 13:
+            timestamp = timestamp // 1000
+        return time.strftime("%Y-%m-%d", time.localtime(timestamp))
+    return text
+
+
+def numeric_value(value):
+    text = str(value or "").strip().replace(",", "")
+    if not text:
+        return None
+    units = {"万": 10000, "千": 1000, "k": 1000, "K": 1000}
+    multiplier = 1
+    if text[-1:] in units:
+        multiplier = units[text[-1]]
+        text = text[:-1]
+    try:
+        return float(text) * multiplier
+    except ValueError:
+        return None
+
+
+def avg_daily_sales_1y(value):
+    number = numeric_value(value)
+    if number is None:
+        return ""
+    return str(int(round(number / 365)))
+
+
+def fulfillment_type(record):
+    explicit = first_value(
+        record,
+        ["fulfillment_type", "fulfillmentType", "managed_type", "managedType", "choiceName", "choice_name"],
+    )
+    if explicit:
+        return explicit
+
+    choice = first_value(record, ["choice"])
+    choice_type = first_value(record, ["choice_type", "choiceType"])
+    if choice == "0" and choice_type == "0":
+        return "非托管"
+    if choice_type == "1":
+        return "全托管"
+    if choice_type == "2":
+        return "半托管"
+    if choice == "1":
+        return "托管"
+    return ""
+
+
 def flatten_aliexpress_record(record, source_rank=None):
     if not isinstance(record, dict):
         return {}
@@ -112,6 +167,17 @@ def flatten_aliexpress_record(record, source_rank=None):
     if not category:
         category = nested_first_value(record, [["categoryInfo", "cnTitlePath"], ["categoryInfo", "enTitlePath"]])
 
+    sales_1y = first_value(record, ["sales_1y", "sales1y", "trade_total", "tradeTotal", "sales", "order_count", "orders"])
+    comments_1y = first_value(record, ["comments_1y", "comments1y", "review_total", "reviewTotal", "review_count", "reviews"])
+    first_found_at = normalize_epoch_date(
+        first_value(record, ["first_found_at", "firstFoundAt", "first_found_time", "firstFoundTime", "add_time", "addTime"])
+    )
+    daily_sales_1y = first_value(
+        record,
+        ["avg_daily_sales_1y", "average_daily_sales_1y", "daily_sales_1y", "trade_avg_day", "tradeAvgDay"],
+    ) or avg_daily_sales_1y(sales_1y)
+    weekly_growth = first_value(record, ["weekly_growth", "week_growth", "trade_inc", "tradeInc", "growth_7d"])
+
     return {
         "source_rank": source_rank if source_rank is not None else first_value(record, ["rank_num", "rank", "ranking", "index"]),
         "sku": sku,
@@ -138,13 +204,21 @@ def flatten_aliexpress_record(record, source_rank=None):
         ),
         "price": first_value(record, ["price", "salePrice", "productPrice", "product_price", "minPrice", "amount"]),
         "product_url": product_url,
-        "sales": first_value(record, ["sales", "trade_total", "tradeTotal", "order_count", "orders"]),
+        "sales": sales_1y,
+        "sales_1y": sales_1y,
         "sales_7d": first_value(record, ["sales_7d", "trade_7_count", "trade7Count", "recent_sales"]),
-        "review_count": first_value(record, ["review_count", "review_total", "reviewTotal", "reviews"]),
+        "review_count": comments_1y,
+        "comments_1y": comments_1y,
         "rating": first_value(record, ["rating", "ratings", "review_rating", "reviewRating"]),
         "seller_id": first_value(record, ["seller_id", "store_id", "storeId", "shopId"]),
         "seller_name": first_value(record, ["seller_name", "store_name", "storeName", "shopName"]),
         "seller_positive_rate": nested_first_value(record, [["feedback", "positive_rate"]]),
+        "weekly_growth": weekly_growth,
+        "first_found_at": first_found_at,
+        "avg_daily_sales_1y": daily_sales_1y,
+        "fulfillment_type": fulfillment_type(record),
+        "choice": first_value(record, ["choice"]),
+        "choice_type": first_value(record, ["choice_type", "choiceType"]),
     }
 
 
@@ -269,8 +343,10 @@ def fetch_pages(method, url, headers, body):
 def output_fields():
     return [
         "source_rank", "sku", "product_name", "brand", "category", "image_url",
-        "price", "product_url", "sales", "sales_7d", "review_count", "rating",
-        "seller_id", "seller_name", "seller_positive_rate",
+        "price", "product_url", "sales", "sales_1y", "sales_7d", "review_count",
+        "comments_1y", "rating", "weekly_growth", "first_found_at", "avg_daily_sales_1y",
+        "fulfillment_type", "choice", "choice_type", "seller_id", "seller_name",
+        "seller_positive_rate",
     ]
 
 

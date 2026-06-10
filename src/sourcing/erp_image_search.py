@@ -14,6 +14,7 @@ from sourcing.collect.api_common import write_csv
 
 
 DEFAULT_API_URL = "http://103.198.125.2:8077/Api/prodetail/picSearchFunds"
+DEFAULT_URL_API_URL = "http://103.198.125.2:16777/open/pic/searchProductByPicUrl"
 RESULT_FIELDS = [
     "source",
     "product_type",
@@ -26,9 +27,17 @@ RESULT_FIELDS = [
     "external_category",
     "external_price",
     "external_sales",
+    "external_sales_1y",
     "external_sales_7d",
     "external_review_count",
+    "external_comments_1y",
     "external_rating",
+    "external_weekly_growth",
+    "external_first_found_at",
+    "external_avg_daily_sales_1y",
+    "external_fulfillment_type",
+    "external_choice",
+    "external_choice_type",
     "external_seller_id",
     "external_seller_name",
     "external_seller_positive_rate",
@@ -59,9 +68,17 @@ BOSS_DECISION_FIELDS = [
     "external_category",
     "external_price",
     "external_sales",
+    "external_sales_1y",
     "external_sales_7d",
     "external_review_count",
+    "external_comments_1y",
     "external_rating",
+    "external_weekly_growth",
+    "external_first_found_at",
+    "external_avg_daily_sales_1y",
+    "external_fulfillment_type",
+    "external_choice",
+    "external_choice_type",
     "external_seller_id",
     "external_seller_name",
     "external_seller_positive_rate",
@@ -89,9 +106,17 @@ BOSS_DECISION_FIELD_LABELS = {
     "external_category": "外部平台类目",
     "external_price": "外部平台价格",
     "external_sales": "外部平台累计销量",
+    "external_sales_1y": "近一年销量",
     "external_sales_7d": "近7天销量",
     "external_review_count": "外部平台评论数",
+    "external_comments_1y": "近一年评论数",
     "external_rating": "外部平台评分",
+    "external_weekly_growth": "周增长数",
+    "external_first_found_at": "首次发现时间",
+    "external_avg_daily_sales_1y": "近一年日均销量",
+    "external_fulfillment_type": "托管类型",
+    "external_choice": "托管标记",
+    "external_choice_type": "托管类型原始值",
     "external_seller_id": "外部平台卖家ID",
     "external_seller_name": "外部平台卖家名称",
     "external_seller_positive_rate": "外部平台卖家好评率",
@@ -104,6 +129,7 @@ BOSS_DECISION_FIELD_LABELS = {
     "risk_candidate_count": "ERP风险同款数量",
     "top_erp_skus": "最相似ERP SKU",
     "top_main_skus": "对应ERP主SKU",
+    "max_embedding_similarity": "最高图片相似度",
 }
 
 PRODUCT_STATUS_MAP = {
@@ -142,12 +168,16 @@ class ErpImageSearchClient:
         timeout: int = 60,
     ) -> None:
         self.token = token if token is not None else os.environ.get("ERP_IMAGE_SEARCH_TOKEN", "")
-        if not self.token:
+        self.url_api_token = os.environ.get("ERP_IMAGE_SEARCH_BY_URL_TOKEN", "")
+        self.url_api_url = os.environ.get("ERP_IMAGE_SEARCH_BY_URL_URL", "")
+        if not self.token and not self.url_api_token:
             raise RuntimeError("ERP_IMAGE_SEARCH_TOKEN not set")
         self.api_url = api_url or os.environ.get("ERP_IMAGE_SEARCH_URL", DEFAULT_API_URL)
         self.timeout = timeout
 
     def search(self, image_url: str) -> SearchResult:
+        if self.url_api_token:
+            return self._search_by_url(image_url)
         image_bytes, filename, content_type = self._download_image(image_url)
         body, boundary = _build_multipart_body(
             fields={"fileUrls": "undefined"},
@@ -160,6 +190,32 @@ class ErpImageSearchClient:
             headers={
                 "Authorization": self.token,
                 "Content-Type": f"multipart/form-data; boundary={boundary}",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw_text = response.read().decode("utf-8", errors="replace")
+        except HTTPError as err:
+            raw_text = err.read().decode("utf-8", errors="replace")
+            try:
+                payload = json.loads(raw_text)
+            except json.JSONDecodeError:
+                payload = {"code": err.code, "msg": raw_text[:500], "data": []}
+            return normalize_search_response(payload)
+
+        return normalize_search_response(json.loads(raw_text))
+
+    def _search_by_url(self, image_url: str) -> SearchResult:
+        if not image_url or not image_url.lower().startswith(("http://", "https://")):
+            raise RuntimeError("external image_url must start with http:// or https://")
+        body = json.dumps({"picUrl": image_url}, ensure_ascii=False).encode("utf-8")
+        request = Request(
+            self.url_api_url or DEFAULT_URL_API_URL,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": self.url_api_token,
+                "Content-Type": "application/json;charset=UTF-8",
             },
         )
         try:
@@ -250,7 +306,7 @@ def normalize_search_response(payload: dict) -> SearchResult:
             continue
         matches.append(
             {
-                "matched_erp_sku": _first(product, ["sku", "picName", "picname", "imageName"]),
+                "matched_erp_sku": _first(product, ["sku", "picName", "picname", "imageName", "mainSKu", "mainsku", "mainSku", "main_sku"]),
                 "matched_main_sku": _first(product, ["mainSKu", "mainsku", "mainSku", "main_sku"]),
                 "erp_product_status": _first(product, ["productStatus", "statusName", "statusText", "status"]),
                 "erp_image_url": _first(product, ["url", "picUrl", "imageUrl", "imgUrl", "fileUrl"]),
@@ -427,9 +483,17 @@ def build_boss_decision_rows(rows: list[dict]) -> list[dict]:
                 "external_category": first.get("external_category", ""),
                 "external_price": first.get("external_price", ""),
                 "external_sales": first.get("external_sales", ""),
+                "external_sales_1y": first.get("external_sales_1y", ""),
                 "external_sales_7d": first.get("external_sales_7d", ""),
                 "external_review_count": first.get("external_review_count", ""),
+                "external_comments_1y": first.get("external_comments_1y", ""),
                 "external_rating": first.get("external_rating", ""),
+                "external_weekly_growth": first.get("external_weekly_growth", ""),
+                "external_first_found_at": first.get("external_first_found_at", ""),
+                "external_avg_daily_sales_1y": first.get("external_avg_daily_sales_1y", ""),
+                "external_fulfillment_type": first.get("external_fulfillment_type", ""),
+                "external_choice": first.get("external_choice", ""),
+                "external_choice_type": first.get("external_choice_type", ""),
                 "external_seller_id": first.get("external_seller_id", ""),
                 "external_seller_name": first.get("external_seller_name", ""),
                 "external_seller_positive_rate": first.get("external_seller_positive_rate", ""),
@@ -457,13 +521,15 @@ def render_boss_decision_markdown(decisions: list[dict], source: str, product_ty
         "",
         "## 决策摘要",
         "",
-        "| 平台SKU | 商品名称 | 价格 | 销量 | 7天销量 | 评论数 | 评分 | 结论 | 建议动作 | ERP候选 | 正常候选 | 停产候选 |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | ---: |",
+        "| 平台SKU | 商品名称 | 价格 | 近一年销量 | 近一年评论 | 7天销量 | 周增长 | 日均销量 | 首次发现 | 托管类型 | 结论 | 建议动作 | ERP候选 | 正常候选 | 停产候选 |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | --- | --- | ---: | ---: | ---: |",
     ]
     for row in decisions:
         lines.append(
             "| {external_sku} | {external_product_name} | {external_price} | {external_sales} | "
-            "{external_sales_7d} | {external_review_count} | {external_rating} | {final_decision} | {boss_action} | "
+            "{external_review_count} | {external_sales_7d} | {external_weekly_growth} | "
+            "{external_avg_daily_sales_1y} | {external_first_found_at} | {external_fulfillment_type} | "
+            "{final_decision} | {boss_action} | "
             "{candidate_count} | {normal_candidate_count} | {stopped_candidate_count} |".format(
                 **{key: _md_cell(value) for key, value in row.items()}
             )
@@ -477,9 +543,14 @@ def render_boss_decision_markdown(decisions: list[dict], source: str, product_ty
                 "",
                 f"- 商品名称：{row.get('external_product_name') or '-'}",
                 f"- 外部平台价格：{row.get('external_price') or '-'}",
-                f"- 外部平台销量：{row.get('external_sales') or '-'}",
+                f"- 近一年销量：{row.get('external_sales') or '-'}",
+                f"- 近一年评论数：{row.get('external_review_count') or '-'}",
                 f"- 近 7 天销量：{row.get('external_sales_7d') or '-'}",
-                f"- 评论数/评分：{row.get('external_review_count') or '-'} / {row.get('external_rating') or '-'}",
+                f"- 周增长数：{row.get('external_weekly_growth') or '-'}",
+                f"- 近一年日均销量：{row.get('external_avg_daily_sales_1y') or '-'}",
+                f"- 首次发现时间：{row.get('external_first_found_at') or '-'}",
+                f"- 托管类型：{row.get('external_fulfillment_type') or '-'}",
+                f"- 评分：{row.get('external_rating') or '-'}",
                 f"- 店铺：{row.get('external_seller_name') or '-'}",
                 f"- 最终结论：{row.get('final_decision')}",
                 f"- 建议动作：{row.get('boss_action')}",
@@ -672,17 +743,22 @@ _EXTERNAL_BIZ_FIELDS = [
     ("品牌", ["brand"]),
     ("类目", ["category"]),
     ("单价", ["price"]),
-    ("累计销量", ["sales"]),
+    ("近一年销量", ["sales_1y", "sales"]),
+    ("近一年评论数", ["comments_1y", "review_count"]),
     ("近7天销量", ["sales_7d"]),
-    ("评论数", ["review_count"]),
+    ("周增长数", ["weekly_growth"]),
+    ("首次发现时间", ["first_found_at"]),
+    ("近一年日均销量", ["avg_daily_sales_1y"]),
+    ("托管类型", ["fulfillment_type"]),
     ("评分", ["rating", "review_rating"]),
     ("卖家", ["seller_name"]),
     ("卖家好评率", ["seller_positive_rate"]),
 ]
 
 BEST_MATCH_FIELDS = [
-    "竞品SKU", "竞品名称", "品牌", "类目", "单价", "累计销量", "近7天销量",
-    "评论数", "评分", "卖家", "卖家好评率", "竞品图", "竞品链接",
+    "竞品SKU", "竞品名称", "品牌", "类目", "单价", "近一年销量", "近一年评论数",
+    "近7天销量", "周增长数", "首次发现时间", "近一年日均销量", "托管类型",
+    "评分", "卖家", "卖家好评率", "竞品图", "竞品链接",
     "最像ERP_SKU", "ERP主SKU", "ERP商品状态", "ERP候选图", "嵌入相似度", "匹配判定",
 ]
 

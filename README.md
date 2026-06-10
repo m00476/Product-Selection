@@ -82,7 +82,7 @@ python -m sourcing.cli collect --source seerfar --product-type xiongzhen
 # 按 .env 的 COLLECT_TARGETS 全部采集
 python -m sourcing.cli collect --all
 ```
-配置（`.env`）：`COLLECT_518_DIR`（518 根目录）、`COLLECT_TARGETS`（如 `seerfar:xiongzhen,erp:xiongzhen`）。
+配置（`.env`）：`COLLECT_518_DIR`（518 根目录，默认 `D:\518`）、`COLLECT_TARGETS`（如 `seerfar:xiongzhen,erp:xiongzhen`）。
 每次运行记录在 `collector_runs` / `collector_errors`。
 
 ### 定时（Windows 任务计划）
@@ -103,7 +103,7 @@ python -m sourcing.cli import-external
 ```powershell
 python -m sourcing.cli bridge-matches
 ```
-配置 `.env` 的 `APP_DB_PATH` 指向 518 的 app.db。`status` 取值：
+配置 `.env` 的 `APP_DB_PATH` 指向 518 的 app.db（默认 `D:\518\data\app.db`）。`status` 取值：
 `confirmed`（已匹配自家 SKU）、`no_erp_match`（竞品在 ERP 无对应 = 选品机会）、`pending` / `rejected`。
 
 ## 看板（Metabase）
@@ -135,7 +135,7 @@ python -m sourcing.cli erp-image-search --source ixspy --product-type <品类> -
 python -m sourcing.cli erp-image-rerank   --source ixspy --product-type <品类> --threshold 0.85
 python -m sourcing.cli erp-image-load-db  --source ixspy --product-type <品类>
 ```
-需 torch + 518 的 DINOv2 缓存（本机已具备）。决策表新增 `max_embedding_similarity`，看板按它排序/筛选可显著降低“形似不同款”的假阳性。
+需 torch + 518 的 DINOv2 缓存（本机已具备）。`EMBEDDING_REPO_DIR` 默认指向 `D:\518`。决策表新增 `max_embedding_similarity`，看板按它排序/筛选可显著降低“形似不同款”的假阳性。
 
 ## 测试
 ```powershell
@@ -145,4 +145,4 @@ pytest -v
 ## 数据来源
 ERP、AliExpress/IXSPY、Seerfar/Ozon API probe/fetch 均已在本项目内置，分别输出到
 `input/erp/<品类>/`、`input/aliexpress/<品类>/`、`input/seerfar/<品类>/`。
-`C:\Users\aibp\Desktop\518` 仍可作为历史数据和匹配结果桥接来源。
+`D:\518` 作为历史数据、采集脚本、DINOv2 嵌入代码和匹配结果桥接来源。
