@@ -27,6 +27,13 @@ def test_slug_keeps_ascii_readable_part():
     assert s.startswith("pet_supplies_")
 
 
+def test_slug_transliterates_chinese_to_pinyin():
+    # 纯中文应转成可读拼音(而非 cat_哈希)，便于从文件夹名识别品类
+    s = _derive_slug("汽车及零配件")
+    assert s.startswith("qichejilingpeijian")
+    assert not s.startswith("cat_")
+
+
 # ---------- batch ----------
 
 def test_batch_parsed_from_product_dir_name():

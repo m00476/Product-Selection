@@ -70,11 +70,17 @@ _PRODUCT_DIR_RE = re.compile(r"^Product[_\d]", re.I)
 
 
 def _derive_slug(name: str) -> str:
-    """中文品类名 → 稳定的 ascii slug(内部文件夹/嵌入缓存命名用)。
-    保留可读的 ascii 部分 + 8 位哈希保证唯一且稳定。"""
+    """中文品类名 → 可读的 ascii slug(内部文件夹/嵌入缓存命名用)。
+    中文转拼音(如 汽车及零配件 -> qichejilingpeijian)便于一眼识别，
+    再加 6 位哈希后缀保证稳定且不撞。"""
     name = (name or "").strip()
-    ascii_part = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
-    digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:8]
+    try:
+        from pypinyin import lazy_pinyin
+        text = "".join(lazy_pinyin(name))  # 中文转拼音，ascii 原样保留
+    except Exception:
+        text = name  # 没装 pypinyin 则退回原文(纯中文会落到哈希分支)
+    ascii_part = re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+    digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:6]
     return f"{ascii_part}_{digest}" if ascii_part else f"cat_{digest}"
 
 
