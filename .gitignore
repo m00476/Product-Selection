@@ -13,3 +13,5 @@ scripts/provision_metabase.py
 
 # 生成的报告输出
 reports/
+_downloads/
+.tmp_pytest/
