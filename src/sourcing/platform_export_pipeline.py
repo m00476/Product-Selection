@@ -115,11 +115,12 @@ def _find_export_source(root: str | Path) -> tuple[Path, Path, str]:
 
 
 def prepare_from_download(src: str | Path, *, base_dir: str | Path,
-                          platform: str = "ixspy") -> dict:
+                          platform: str = "ixspy", category_name: str | None = None) -> dict:
     """从原始下载文件夹自动整理到标准输入目录(拷 source.xls + images + 写 metadata.yaml)。
-    自动推导 中文品类名 / slug / 批次。返回 dict(platform, product_type=slug, batch, product_type_name, input_dir)。"""
+    自动推导 中文品类名 / slug / 批次；category_name 显式传入时覆盖按文件夹名推导
+    (自动下载场景:解压目录为 Product_xxx 无中文名)。返回 dict(platform, product_type=slug, batch, product_type_name, input_dir)。"""
     xls_path, images_dir, inner_name = _find_export_source(src)
-    category_name = _derive_category_name(src)
+    category_name = category_name or _derive_category_name(src)
     slug = _derive_slug(category_name)
     batch = _derive_batch(inner_name)
 
@@ -168,10 +169,10 @@ def default_base_dir() -> str:
 def run_from_download(src: str | Path, *, base_dir: str | Path | None = None,
                       platform: str = "ixspy", source: str = "ixspy",
                       limit: int | None = None, delay_seconds: float = 0.5,
-                      threshold: float = 0.85) -> dict:
+                      threshold: float = 0.85, category_name: str | None = None) -> dict:
     """一键：原始下载文件夹 → 整理 → 解析 → 双筛 → 报告。返回流程结果(含 auto 推导信息)。"""
     base_dir = base_dir or default_base_dir()
-    info = prepare_from_download(src, base_dir=base_dir, platform=platform)
+    info = prepare_from_download(src, base_dir=base_dir, platform=platform, category_name=category_name)
     result = run_platform_export_pipeline(
         base_dir=base_dir, platform=platform, product_type=info["product_type"],
         batch=info["batch"], source=source, limit=limit,

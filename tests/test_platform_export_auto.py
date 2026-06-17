@@ -94,3 +94,16 @@ def test_prepare_from_download_organizes_into_standard_input(tmp_path):
     assert (dst / "metadata.yaml").exists()
     meta = (dst / "metadata.yaml").read_text(encoding="utf-8")
     assert "男女内衣及家居服" in meta
+
+
+def test_prepare_uses_explicit_category_name_over_folder(tmp_path):
+    # 自动下载场景：解压目录名是 Product_xxx(无中文)，但我们已知用户输入的品类名
+    src = tmp_path / "Product_2026_6_10_week"
+    inner = src / "Product_2026_6_10_week"
+    (inner / "images").mkdir(parents=True)
+    (inner / "images" / "a.jpg").write_bytes(b"x")
+    (inner / "Product_2026_6_10_week.xls").write_text("<table></table>", encoding="utf-8")
+    base = tmp_path / "project"
+    info = prepare_from_download(str(src), base_dir=str(base), category_name="汽车及零配件")
+    assert info["product_type_name"] == "汽车及零配件"
+    assert info["product_type"].startswith("qichejilingpeijian")
