@@ -94,3 +94,33 @@ def test_prepare_from_download_organizes_into_standard_input(tmp_path):
     assert (dst / "metadata.yaml").exists()
     meta = (dst / "metadata.yaml").read_text(encoding="utf-8")
     assert "男女内衣及家居服" in meta
+
+
+def test_prepare_uses_explicit_category_name_over_folder(tmp_path):
+    # 自动下载场景：解压目录名是 Product_xxx(无中文)，但我们已知用户输入的品类名
+    src = tmp_path / "Product_2026_6_10_week"
+    inner = src / "Product_2026_6_10_week"
+    (inner / "images").mkdir(parents=True)
+    (inner / "images" / "a.jpg").write_bytes(b"x")
+    (inner / "Product_2026_6_10_week.xls").write_text("<table></table>", encoding="utf-8")
+    base = tmp_path / "project"
+    info = prepare_from_download(str(src), base_dir=str(base), category_name="汽车及零配件")
+    assert info["product_type_name"] == "汽车及零配件"
+    assert info["product_type"].startswith("qichejilingpeijian")
+
+
+def test_prepare_url_xls_input_copies_and_derives(tmp_path):
+    from sourcing.platform_export_pipeline import _prepare_url_xls_input
+    xls = tmp_path / "Product_2026_6_18_8_58_35_week.xls"
+    xls.write_text("<html><head><meta charset='utf-8'></head><body><table></table></body></html>",
+                   encoding="utf-8")
+    info = _prepare_url_xls_input(str(xls), base_dir=str(tmp_path / "proj"),
+                                  platform="ixspy", category_name="汽车及零配件")
+    assert info["batch"] == "2026-06-18_week"
+    assert info["product_type"].startswith("qichejilingpeijian")
+    assert info["product_type_name"] == "汽车及零配件"
+    from pathlib import Path
+    dst = Path(info["input_dir"])
+    assert (dst / "source.xls").exists()
+    assert (dst / "metadata.yaml").exists()
+    assert "汽车及零配件" in (dst / "metadata.yaml").read_text(encoding="utf-8")

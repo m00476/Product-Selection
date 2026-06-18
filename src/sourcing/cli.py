@@ -117,7 +117,36 @@ def main() -> None:
     per.add_argument("--delay", type=float, default=0.1)
     per.add_argument("--threshold", type=float, default=0.85)
 
+    iad = sub.add_parser("ixspy-auto",
+                         help="一键: 自动登录IXSPY下载该品类压缩包 + 双筛 + 报告")
+    iad.add_argument("--category", required=True, help="品类中文名, 如 汽车及零配件")
+    iad.add_argument("--headless", action="store_true", help="无界面跑Chrome")
+    iad.add_argument("--limit", type=int, default=None, help="小样本测试, 如 --limit 30")
+    iad.add_argument("--delay", type=float, default=0.1)
+    iad.add_argument("--threshold", type=float, default=0.85)
+
     args = parser.parse_args()
+
+    if args.command == "ixspy-auto":
+        import os
+        from sourcing.collect.ixspy_download import download_export
+        from sourcing.platform_export_pipeline import run_from_url_xls, default_base_dir
+        base = default_base_dir()
+        dl_dir = os.path.join(base, "_downloads", "ixspy")
+        print(f"[1/2] 下载品类: {args.category} (会弹Chrome自动登录, 用'仅含图片URL'导出秒下)")
+        xls_path = download_export(args.category, download_dir=dl_dir, headless=args.headless)
+        print(f"[2/2] 解析(URL模式) + 双筛 + 报告: {xls_path}")
+        result = run_from_url_xls(xls_path, base_dir=base, category_name=args.category,
+                                  limit=args.limit, delay_seconds=args.delay,
+                                  threshold=args.threshold)
+        report_dir = result.get("report_dir", "")
+        print(f"[DONE] {args.category} | 匹配 {result.get('final', {}).get('matched')}"
+              f"/{result.get('final', {}).get('products')} | 报告: {report_dir}")
+        try:
+            os.startfile(report_dir)
+        except Exception:
+            pass
+        return
 
     if args.command == "platform-export-run":
         from sourcing.platform_export_pipeline import run_from_download
