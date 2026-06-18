@@ -182,20 +182,66 @@ def run_from_download(src: str | Path, *, base_dir: str | Path | None = None,
     return result
 
 
+def _prepare_url_xls_input(xls_path: str | Path, *, base_dir: str | Path,
+                           platform: str = "ixspy", category_name: str) -> dict:
+    """把"仅含图片URL"导出的单个 .xls 摆成标准 batch 输入(source.xls + metadata，无 images/)。
+    自动由 category_name 定 slug、由 xls 文件名定批次。返回 dict(platform/product_type/batch/...)。"""
+    xls_path = Path(xls_path)
+    slug = _derive_slug(category_name)
+    batch = _derive_batch(xls_path.stem)
+    dst = batch_input_dir(base_dir, platform, slug, batch)
+    dst.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(xls_path, dst / "source.xls")
+    metadata = (
+        f"platform: {platform}\n"
+        f"product_type: {slug}\n"
+        f"product_type_name: {category_name}\n"
+        f"source: 速卖通产品-新品增长榜(仅含图片URL)\n"
+        f"period: {batch}\n"
+        f"downloaded_at: {date.today().isoformat()}\n"
+        f"image_url_infer:\n"
+        f"  enabled: false\n"
+    )
+    (dst / "metadata.yaml").write_text(metadata, encoding="utf-8")
+    return {"platform": platform, "product_type": slug, "batch": batch,
+            "product_type_name": category_name, "input_dir": str(dst)}
+
+
+def run_from_url_xls(xls_path: str | Path, *, base_dir: str | Path | None = None,
+                     platform: str = "ixspy", source: str = "ixspy", category_name: str,
+                     limit: int | None = None, delay_seconds: float = 0.5,
+                     threshold: float = 0.85) -> dict:
+    """一键：仅含图片URL的 .xls → 整理 → 解析(URL模式) → 双筛 → 报告。"""
+    base_dir = base_dir or default_base_dir()
+    info = _prepare_url_xls_input(xls_path, base_dir=base_dir, platform=platform,
+                                  category_name=category_name)
+    result = run_platform_export_pipeline(
+        base_dir=base_dir, platform=platform, product_type=info["product_type"],
+        batch=info["batch"], source=source, limit=limit,
+        delay_seconds=delay_seconds, threshold=threshold)
+    result["auto"] = info
+    result["report_dir"] = str(batch_output_dir(base_dir, platform, info["product_type"], info["batch"]))
+    return result
+
+
 def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = None) -> tuple[list[dict], list[dict]]:
     batch_path = Path(batch_dir)
     source_path = batch_path / "source.xls"
     image_dir = batch_path / "images"
     if not source_path.exists():
         raise FileNotFoundError(source_path)
-    if not image_dir.exists():
-        raise FileNotFoundError(image_dir)
 
     html = source_path.read_text(encoding="utf-8", errors="ignore")
     table = pd.read_html(source_path)[0].fillna("")
     original_rows = table.astype(str).to_dict("records")
-    # 行内取图 + 对齐校验，避免某行缺图导致后续整体错位的静默错配
-    image_refs = _row_image_filenames(html, len(original_rows))
+    # 两种导出：压缩包版图片是 <img src="./images/xxx"> + 本地 images/；
+    # URL版无 img 标签、图片完整 URL 直接在"产品图"列。按是否有本地 img 标签区分。
+    has_local_imgs = bool(re.search(r"<img\s+src=['\"]\.\/images\/", html, flags=re.I))
+    if has_local_imgs:
+        # 行内取图 + 对齐校验，避免某行缺图导致后续整体错位的静默错配
+        image_refs = _row_image_filenames(html, len(original_rows))
+    else:
+        image_refs = [""] * len(original_rows)
 
     metadata = _read_metadata(batch_path / "metadata.yaml")
     product_type_name = metadata.get("product_type_name", "")
@@ -203,7 +249,16 @@ def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = 
     standard_rows = []
     for index, original in enumerate(original_rows):
         filename = image_refs[index] if index < len(image_refs) else ""
-        local_image_path = str((image_dir / filename).resolve()) if filename else ""
+        cell_img = _clean(original.get("产品图", ""))
+        if cell_img.startswith(("http://", "https://")):   # URL版：图片URL在产品图列
+            image_url = cell_img
+            local_image_path = ""
+        elif filename:                                       # 压缩包版：本地图 + 反推URL
+            local_image_path = str((image_dir / filename).resolve())
+            image_url = infer_aliexpress_image_url(filename, base_url)
+        else:
+            image_url = ""
+            local_image_path = ""
         sku = _clean(original.get("商品id", "")).replace("&nbsp", "").strip()
         sales_1y = _clean(original.get("近一年销量", ""))
         comments = _clean(original.get("累计评论数", ""))
@@ -214,7 +269,7 @@ def read_platform_export(batch_dir: str | Path, *, image_base_url: str | None = 
                 "product_name": _clean(original.get("商品名", "")),
                 "brand": _clean(original.get("品牌", "")),
                 "category": product_type_name,
-                "image_url": infer_aliexpress_image_url(filename, base_url),
+                "image_url": image_url,
                 "local_image_path": local_image_path,
                 "price": _clean(original.get("商品价格", "")),
                 "product_url": _clean(original.get("产品地址", "")),

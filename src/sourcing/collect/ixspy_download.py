@@ -5,18 +5,19 @@ import zipfile
 from pathlib import Path
 
 
-def _wait_for_download(snapshot, *, timeout: float, sleep=time.sleep, now=time.monotonic) -> str:
-    """轮询下载目录文件名列表，等到出现 .zip 且无 .crdownload 即完成，返回该 zip 文件名。
+def _wait_for_download(snapshot, *, timeout: float, ext: str = ".zip",
+                       sleep=time.sleep, now=time.monotonic) -> str:
+    """轮询下载目录文件名列表，等到出现指定后缀文件且无 .crdownload 即完成，返回该文件名。
     snapshot() -> list[str] 当前目录文件名；超时抛 TimeoutError。"""
     deadline = now() + timeout
     while now() < deadline:
         names = list(snapshot())
         downloading = any(n.lower().endswith(".crdownload") for n in names)
-        zips = [n for n in names if n.lower().endswith(".zip")]
-        if zips and not downloading:
-            return zips[0]
+        done = [n for n in names if n.lower().endswith(ext)]
+        if done and not downloading:
+            return done[0]
         sleep(1.0)
-    raise TimeoutError("下载超时：未在限定时间内得到完整的 .zip")
+    raise TimeoutError(f"下载超时：未在限定时间内得到完整的 {ext} 文件")
 
 
 def _extract_zip(zip_path: str, dest_dir: str) -> str:
@@ -61,28 +62,33 @@ def build_download_driver(download_dir: str, *, headless: bool):
     return driver
 
 
-def _click_export(driver) -> None:
-    """点击"数据导出(下载压缩包...)"按钮。找不到则抛错。"""
+def _click_url_export(driver) -> None:
+    """点击"数据导出(仅含图片URL)"项。它瞬间下一个含完整图片URL的 .xls(无需等客户端打包)。
+    找不到则抛错。"""
     xpaths = [
-        "//button[contains(normalize-space(.), '数据导出')]",
-        "//*[contains(@class,'btn') and contains(normalize-space(.), '数据导出')]",
-        "//a[contains(normalize-space(.), '数据导出')]",
-        "//span[contains(normalize-space(.), '数据导出')]/ancestor::button",
+        "//*[starts-with(@id,'export_') and contains(normalize-space(.), '仅含图片URL')]",
+        "//*[contains(normalize-space(.), '仅含图片URL')]",
     ]
     for xpath in xpaths:
         for element in driver.find_elements("xpath", xpath):
             try:
-                if element.is_displayed():
+                if not element.is_displayed():
+                    continue
+                driver.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+                try:
+                    element.click()
+                except Exception:
                     driver.execute_script("arguments[0].click();", element)
-                    return
+                return
             except Exception:
                 continue
-    raise RuntimeError("找不到'数据导出'按钮，页面可能改版，请人工确认")
+    raise RuntimeError("找不到'数据导出(仅含图片URL)'项，页面可能改版，请人工确认")
 
 
 def download_export(category: str, *, download_dir: str, headless: bool = False,
-                    timeout: float = 600, driver_factory=None) -> str:
-    """登录 IXSPY → 进新品增长榜 → 选类目 → 点数据导出 → 等 zip 下完，返回 zip 路径。"""
+                    timeout: float = 120, driver_factory=None) -> str:
+    """登录 IXSPY → 进新品增长榜 → 选类目 → 点"仅含图片URL"导出 → 等 xls 下完，返回 xls 路径。
+    用URL版导出(秒下、含完整图片URL)，而非压缩包版(客户端逐张下图打包,慢且按钮难点)。"""
     from sourcing.collect.aliexpress_api_probe import (
         get_login_token_url, search_category, save_debug_artifacts, ALIEXPRESS_IXSPY_LIST_URL,
     )
@@ -109,9 +115,10 @@ def download_export(category: str, *, download_dir: str, headless: bool = False,
         if should_fail_category(category, selected):
             save_debug_artifacts(driver, download_dir, "ixspy_download_category_failed")
             raise RuntimeError(f"类目未选中，已中止以防下错品类: {category!r}")
-        _click_export(driver)
+        time.sleep(3)  # 等导出按钮就绪
+        _click_url_export(driver)
         name = _wait_for_download(
-            lambda: [p.name for p in download_dir.glob("*")], timeout=timeout)
+            lambda: [p.name for p in download_dir.glob("*")], timeout=timeout, ext=".xls")
         return str(download_dir / name)
     finally:
         driver.quit()

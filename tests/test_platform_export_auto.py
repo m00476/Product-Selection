@@ -107,3 +107,20 @@ def test_prepare_uses_explicit_category_name_over_folder(tmp_path):
     info = prepare_from_download(str(src), base_dir=str(base), category_name="汽车及零配件")
     assert info["product_type_name"] == "汽车及零配件"
     assert info["product_type"].startswith("qichejilingpeijian")
+
+
+def test_prepare_url_xls_input_copies_and_derives(tmp_path):
+    from sourcing.platform_export_pipeline import _prepare_url_xls_input
+    xls = tmp_path / "Product_2026_6_18_8_58_35_week.xls"
+    xls.write_text("<html><head><meta charset='utf-8'></head><body><table></table></body></html>",
+                   encoding="utf-8")
+    info = _prepare_url_xls_input(str(xls), base_dir=str(tmp_path / "proj"),
+                                  platform="ixspy", category_name="汽车及零配件")
+    assert info["batch"] == "2026-06-18_week"
+    assert info["product_type"].startswith("qichejilingpeijian")
+    assert info["product_type_name"] == "汽车及零配件"
+    from pathlib import Path
+    dst = Path(info["input_dir"])
+    assert (dst / "source.xls").exists()
+    assert (dst / "metadata.yaml").exists()
+    assert "汽车及零配件" in (dst / "metadata.yaml").read_text(encoding="utf-8")

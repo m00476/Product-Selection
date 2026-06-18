@@ -129,18 +129,16 @@ def main() -> None:
 
     if args.command == "ixspy-auto":
         import os
-        from sourcing.collect.ixspy_download import download_export, _extract_zip
-        from sourcing.platform_export_pipeline import run_from_download, default_base_dir
+        from sourcing.collect.ixspy_download import download_export
+        from sourcing.platform_export_pipeline import run_from_url_xls, default_base_dir
         base = default_base_dir()
         dl_dir = os.path.join(base, "_downloads", "ixspy")
-        print(f"[1/3] 下载品类: {args.category} (会弹Chrome自动登录)")
-        zip_path = download_export(args.category, download_dir=dl_dir, headless=args.headless)
-        print(f"[2/3] 解压: {zip_path}")
-        src = _extract_zip(zip_path, os.path.join(base, "_downloads", "ixspy_extract"))
-        print("[3/3] 双筛 + 报告")
-        result = run_from_download(src, base_dir=base, category_name=args.category,
-                                   limit=args.limit, delay_seconds=args.delay,
-                                   threshold=args.threshold)
+        print(f"[1/2] 下载品类: {args.category} (会弹Chrome自动登录, 用'仅含图片URL'导出秒下)")
+        xls_path = download_export(args.category, download_dir=dl_dir, headless=args.headless)
+        print(f"[2/2] 解析(URL模式) + 双筛 + 报告: {xls_path}")
+        result = run_from_url_xls(xls_path, base_dir=base, category_name=args.category,
+                                  limit=args.limit, delay_seconds=args.delay,
+                                  threshold=args.threshold)
         report_dir = result.get("report_dir", "")
         print(f"[DONE] {args.category} | 匹配 {result.get('final', {}).get('matched')}"
               f"/{result.get('final', {}).get('products')} | 报告: {report_dir}")
