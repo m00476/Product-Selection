@@ -15,7 +15,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 # 图搜嵌入复核(erp-image-rerank)需要 AVIF 解码(AliExpress 图多为 AVIF)；
 # torch + DINOv2 模型走 518 环境(运行期按 COLLECT_518_DIR 加载)。
-rerank = ["pillow-avif-plugin>=1.4"]
+rerank = ["pillow-avif-plugin>=1.4", "Pillow>=10.0", "imagehash>=4.3", "numpy>=1.24", "torch>=2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

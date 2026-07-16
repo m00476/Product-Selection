@@ -2,6 +2,15 @@ import numpy as np
 from sourcing.rerank.embed import rerank_rows, DEFAULT_THRESHOLD, resolve_embedding_batch_size
 
 
+def test_default_embedder_module_is_vendored(monkeypatch):
+    from sourcing.rerank.embed import _import_iem
+
+    monkeypatch.delenv("EMBEDDING_REPO_DIR", raising=False)
+    module = _import_iem()
+
+    assert module.__name__ == "sourcing.vendor_518.image_embedding_matcher"
+
+
 def _fake_embeddings():
     vecs = {
         "qA": np.array([1.0, 0.0, 0.0]),

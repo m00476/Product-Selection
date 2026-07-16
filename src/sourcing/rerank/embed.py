@@ -1,5 +1,6 @@
 import os
 import sys
+import importlib
 
 from sourcing.erp_image_search import output_csv_path, _read_csv_dicts, RESULT_FIELDS, _fields_with_extras
 from sourcing.collect.api_common import write_csv
@@ -134,9 +135,8 @@ class BatchedDinoEmbedder:
         return results
 
 
-def sqlite_cache_path(repo_dir: str | None = None) -> str:
-    """嵌入 SQLite 缓存路径(与 518 pkl 同目录)。"""
-    import image_embedding_matcher as iem
+def sqlite_cache_path(iem) -> str:
+    """嵌入 SQLite 缓存路径(与当前嵌入器缓存同目录)。"""
     return os.path.join(os.path.dirname(iem.EMBEDDING_CACHE_FILE), "image_embeddings.sqlite")
 
 
@@ -144,27 +144,29 @@ def _import_iem(repo_dir: str | None = None):
     from sourcing import config
     repo_dir = repo_dir or config.embedding_repo_dir()
     if repo_dir not in sys.path:
-        sys.path.insert(0, repo_dir)
+        if repo_dir:
+            sys.path.insert(0, repo_dir)
     try:
         import pillow_avif  # noqa: F401  注册 AVIF 解码：AliExpress 图多为 AVIF，PIL 默认读不了
     except ImportError:
         pass
-    return repo_dir
+    if repo_dir:
+        return importlib.import_module("image_embedding_matcher")
+    return importlib.import_module("sourcing.vendor_518.image_embedding_matcher")
 
 
 def build_embedder(repo_dir: str | None = None, product_type: str | None = None,
                    use_sqlite_cache: bool | None = None, batch_size: int = 1):
-    """懒加载 518 的 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。
-    repo_dir = 518 嵌入代码所在目录（与数据 base_dir 解耦），默认 config.embedding_repo_dir()。
+    """懒加载内置 DINOv2 嵌入器。返回 (get_embedding, matcher)。需 torch + 模型缓存。
+    repo_dir 可选指定旧版 518 代码目录；未指定时使用项目内置实现。
 
     use_sqlite_cache: True/None 且 SQLite 已迁移时，用按 key 懒查的 SQLite 缓存替换 matcher.cache，
     避免把 15万条 pkl 一次性载入内存(OOM)。未迁移则回退原 pkl 行为(零变化)。
     """
-    _import_iem(repo_dir)
-    import image_embedding_matcher as iem
-    from image_embedding_matcher import ImageEmbeddingMatcher
+    iem = _import_iem(repo_dir)
+    ImageEmbeddingMatcher = iem.ImageEmbeddingMatcher
 
-    sqlite_path = sqlite_cache_path(repo_dir)
+    sqlite_path = sqlite_cache_path(iem)
     want_sqlite = use_sqlite_cache if use_sqlite_cache is not None else os.path.exists(sqlite_path)
     if not want_sqlite:
         matcher = ImageEmbeddingMatcher(product_type=product_type)

@@ -42,6 +42,5 @@ def app_db_path() -> str:
 
 
 def embedding_repo_dir() -> str:
-    """518 项目根（含 image_embedding_matcher.py 等 DINOv2 嵌入代码）。
-    与数据 base_dir 解耦：数据可在别处，嵌入器代码始终在 518。"""
-    return os.environ.get("EMBEDDING_REPO_DIR", r"D:\518")
+    """可选的旧版 518 嵌入代码目录；默认使用项目内置实现。"""
+    return os.environ.get("EMBEDDING_REPO_DIR", "")
