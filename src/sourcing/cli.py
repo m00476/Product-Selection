@@ -75,6 +75,10 @@ def main() -> None:
     mr.add_argument("--product-type", required=True)
     mr.add_argument("--base-dir", default=None)
 
+    sfr = sub.add_parser("seerfar-enriched-report", help="生成 SeerFar 原始字段 + ERP 匹配信息追加报告")
+    sfr.add_argument("--product-type", required=True)
+    sfr.add_argument("--base-dir", default=None)
+
     rp = sub.add_parser("run-product", help="一条龙: 采集→图片两层匹配→报告(带退出码+日志,供计划任务调用)")
     rp.add_argument("--source", default="ixspy", choices=["seerfar", "ixspy"])
     rp.add_argument("--product-type", required=True, help="内部英文 slug(决定文件夹/库标签)")
@@ -244,6 +248,13 @@ def main() -> None:
             source=args.source, product_type=args.product_type,
             base_dir=args.base_dir or config.collect_base_dir())
         print(f"[DONE] best match report: {summary}")
+        return
+
+    if args.command == "seerfar-enriched-report":
+        summary = erp_image_search.generate_seerfar_enriched_report(
+            product_type=args.product_type,
+            base_dir=args.base_dir or config.collect_base_dir())
+        print(f"[DONE] SeerFar enriched report: {summary}")
         return
 
     if args.command == "erp-image-rerank":

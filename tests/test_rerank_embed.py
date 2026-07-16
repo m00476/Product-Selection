@@ -1,5 +1,5 @@
 import numpy as np
-from sourcing.rerank.embed import rerank_rows, DEFAULT_THRESHOLD
+from sourcing.rerank.embed import rerank_rows, DEFAULT_THRESHOLD, resolve_embedding_batch_size
 
 
 def _fake_embeddings():
@@ -41,6 +41,36 @@ def test_rerank_rows_caches_embeddings_per_url():
     rerank_rows(rows, counting)
     assert sorted(set(calls)) == ["c", "q"]
     assert len(calls) == 2
+
+
+def test_rerank_rows_prefetches_unique_images_with_batch_embedder():
+    class BatchEmbedder:
+        def __init__(self):
+            self.calls = []
+
+        def get_embeddings(self, requests):
+            self.calls.append(requests)
+            return {
+                ("q", "aliexpress"): np.array([1.0, 0.0]),
+                ("c", "erp"): np.array([1.0, 0.0]),
+            }
+
+    batch = BatchEmbedder()
+    rows = [
+        {"source": "ixspy", "external_image_url": "q", "erp_image_url": "c"},
+        {"source": "ixspy", "external_image_url": "q", "erp_image_url": "c"},
+    ]
+
+    out = rerank_rows(rows, batch)
+
+    assert batch.calls == [[("q", "aliexpress"), ("c", "erp")]]
+    assert [row["embedding_similarity"] for row in out] == [1.0, 1.0]
+
+
+def test_auto_batch_size_uses_single_image_on_cpu_and_batch_on_cuda():
+    assert resolve_embedding_batch_size(0, cuda_available=False) == 1
+    assert resolve_embedding_batch_size(0, cuda_available=True) == 4
+    assert resolve_embedding_batch_size(8, cuda_available=False) == 8
 
 
 import csv

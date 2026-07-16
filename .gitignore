@@ -15,3 +15,5 @@ scripts/provision_metabase.py
 reports/
 _downloads/
 .tmp_pytest/
+cache/
+.tmp/

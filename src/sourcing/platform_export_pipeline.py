@@ -21,6 +21,8 @@ STANDARD_FIELDS = [
     "category_path",
 ]
 
+BOSS_REPORT_VERDICTS = {"高置信匹配", "可能匹配"}
+
 
 def batch_input_dir(base_dir: str | Path, platform: str, product_type: str, batch: str) -> Path:
     return Path(base_dir) / "input" / "platform_exports" / platform / product_type / batch
@@ -568,15 +570,15 @@ def write_final_reports(
     csv_path = batch_out / "matched_report.csv"
     xlsx_path = batch_out / _boss_report_filename(metadata.get("product_type_name") or product_type)
     pd.DataFrame(final_rows).to_csv(csv_path, index=False, encoding="utf-8-sig")
-    pd.DataFrame(final_rows).to_excel(xlsx_path, index=False)
+    boss_rows = _boss_report_rows(final_rows)
+    pd.DataFrame(boss_rows).to_excel(xlsx_path, index=False)
 
-    shutil.copyfile(
-        erp_image_search.output_csv_path(staging_base_dir, source, product_type),
-        batch_out / "raw_erp_image_search.csv",
-    )
-    shutil.copyfile(
-        erp_image_search.boss_decision_csv_path(staging_base_dir, source, product_type),
+    raw_public_rows, raw_public_fields = _public_raw_erp_rows_and_fields(result_rows)
+    write_csv(str(batch_out / "raw_erp_image_search.csv"), raw_public_rows, raw_public_fields)
+    pd.DataFrame(boss_rows).to_csv(
         batch_out / "boss_decision_report.csv",
+        index=False,
+        encoding="utf-8-sig",
     )
     shutil.copyfile(
         erp_image_search.best_match_csv_path(staging_base_dir, source, product_type),
@@ -586,8 +588,29 @@ def write_final_reports(
         "matched_csv": str(csv_path),
         "boss_xlsx": str(xlsx_path),
         "products": len(final_rows),
+        "boss_products": len(boss_rows),
         "matched": sum(1 for row in final_rows if row.get("最像ERP_SKU")),
     }
+
+
+def _boss_report_rows(rows: list[dict]) -> list[dict]:
+    return [row for row in rows if row.get("匹配判定") in BOSS_REPORT_VERDICTS]
+
+
+def _public_raw_erp_rows_and_fields(rows: list[dict]) -> tuple[list[dict], list[str]]:
+    hidden_fields = {"erp_sell_price"}
+    public_rows = [
+        {key: value for key, value in row.items() if key not in hidden_fields}
+        for row in rows
+    ]
+    fields = []
+    seen = set()
+    for row in public_rows:
+        for key in row:
+            if key not in seen:
+                seen.add(key)
+                fields.append(key)
+    return public_rows, fields
 
 
 def _best_result_by_sku(rows: list[dict]) -> dict[str, dict]:

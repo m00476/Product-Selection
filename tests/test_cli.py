@@ -269,3 +269,19 @@ def test_cli_erp_image_match_report(monkeypatch):
     )
     cli.main()
     assert calls == {"source": "ixspy", "product_type": "home_goods", "base_dir": "/base518"}
+
+
+def test_cli_seerfar_enriched_report(monkeypatch):
+    calls = {}
+    monkeypatch.setattr(sys, "argv", [
+        "sourcing.cli", "seerfar-enriched-report", "--product-type", "ozon_hot",
+    ])
+    monkeypatch.setattr(cli.config, "collect_base_dir", lambda: "/base518")
+    monkeypatch.setattr(cli.db, "connect", lambda _dsn: (_ for _ in ()).throw(AssertionError("db not needed")))
+    monkeypatch.setattr(
+        cli.erp_image_search, "generate_seerfar_enriched_report",
+        lambda *, product_type, base_dir:
+            calls.update(product_type=product_type, base_dir=base_dir) or {"products": 30, "csv": "x.csv"},
+    )
+    cli.main()
+    assert calls == {"product_type": "ozon_hot", "base_dir": "/base518"}
